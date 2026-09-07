@@ -15,6 +15,7 @@ import {
   ActivityIndicator,
   Modal,
   Pressable,
+  RefreshControl,
   ScrollView,
   Switch,
   View,
@@ -106,6 +107,7 @@ export default function AdminDashboardScreen() {
     unitId: "",
   });
   const [message, setMessage] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const requests = useQuery({
     queryKey: ["admin", "requests", user?.unidadAdministrativaId],
@@ -217,6 +219,17 @@ export default function AdminDashboardScreen() {
     invite.email.trim().endsWith("@tabasco.gob.mx") &&
     invite.password.length >= 8;
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      const refreshes: Promise<unknown>[] = [requests.refetch()];
+      if (isAdmin) refreshes.push(units.refetch(), services.refetch());
+      await Promise.all(refreshes);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   return (
     <View className="flex-1 bg-background">
       <View className="border-b border-border px-6 pb-4 pt-14">
@@ -255,7 +268,17 @@ export default function AdminDashboardScreen() {
           <Text className="text-center text-sm text-primary">{message}</Text>
         </View>
       ) : null}
-      <ScrollView contentContainerStyle={{ padding: 20, gap: 12 }}>
+      <ScrollView
+        contentContainerStyle={{ padding: 20, gap: 12 }}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#981646"
+            colors={["#981646"]}
+          />
+        }
+      >
         {section === "solicitudes" &&
           (requests.isLoading ? (
             <ActivityIndicator color="#981646" />

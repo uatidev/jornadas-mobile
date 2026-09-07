@@ -7,7 +7,6 @@
     "icon": "./src/assets/images/icon.png",
     "scheme": "jornadas",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "description": "Sistema oficial de levantamiento de información del Secretaría de Turismo y Desarrollo Económico. Formularios para promociones, desarrollo turístico, ferias, comercio y economía social.",
     "ios": {
       "supportsTablet": true,
@@ -28,7 +27,6 @@
         "backgroundColor": "#9A1445",
         "monochromeImage": "./src/assets/images/icon.png"
       },
-      "edgeToEdgeEnabled": true,
       "package": "com.turismo.jornadasdeatencion",
       "permissions": [
         "android.permission.ACCESS_FINE_LOCATION",
@@ -57,7 +55,7 @@
     "web": {
       "bundler": "metro",
       "output": "static",
-      "favicon": "./assets/images/favicon.png",
+      "favicon": "./src/assets/images/favicon.png",
       "title": "Jornadas de Atención - Secretaría de Turismo y Desarrollo Económico",
       "description": "Sistema oficial de levantamiento de información del Secretaría de Turismo y Desarrollo Económico. Formularios para promociones, desarrollo turístico, ferias, comercio y economía social.",
       "keywords": [
@@ -106,7 +104,9 @@
           "photosPermission": "Esta aplicación necesita acceso a tu galería de fotos para seleccionar imágenes de documentos y atractivos turísticos.",
           "cameraPermission": "Esta aplicación necesita acceso a la cámara para tomar fotografías de documentos de identificación y atractivos turísticos."
         }
-      ]
+      ],
+      "expo-image",
+      "expo-status-bar"
     ],
     "experiments": {
       "typedRoutes": true

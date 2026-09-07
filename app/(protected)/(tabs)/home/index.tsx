@@ -2,26 +2,109 @@ import { HomeHeader } from "@/src/components/modules/home";
 import { useActiveEvents, useServicesCatalog } from "@/src/hooks/useCatalog";
 import { useNewRequest } from "@/src/hooks/useHome";
 import { useAuth } from "@/src/providers/AuthProvider";
+import type { AttentionEvent } from "@/src/types/catalog";
+import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { useEffect, useState } from "react";
 import { ChevronRight } from "lucide-react-native";
-import { ActivityIndicator, Platform, Pressable, ScrollView, Text, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+
+const distanceInKm = (
+  latitude: number,
+  longitude: number,
+  event: AttentionEvent,
+) => {
+  const toRadians = (degrees: number) => (degrees * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const latitudeDelta = toRadians(event.latitude - latitude);
+  const longitudeDelta = toRadians(event.longitude - longitude);
+  const originLatitude = toRadians(latitude);
+  const eventLatitude = toRadians(event.latitude);
+  const a =
+    Math.sin(latitudeDelta / 2) ** 2 +
+    Math.cos(originLatitude) *
+    Math.cos(eventLatitude) *
+    Math.sin(longitudeDelta / 2) ** 2;
+
+  return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
 
 export default function HomeScreen() {
   const { handleLogout, handleNavigate } = useNewRequest();
   const { user } = useAuth();
   const router = useRouter();
   const { data: services = [], isLoading, error, refetch } = useServicesCatalog();
-  const { data: events = [] } = useActiveEvents();
+  const { data: events = [], refetch: refetchEvents } = useActiveEvents();
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState("");
+  const autoSelectionStarted = useRef(false);
+  const manuallySelected = useRef(false);
 
-  // Auto-seleccionar el primer evento activo disponible
   useEffect(() => {
-    if (!selectedEventId && events[0]) setSelectedEventId(events[0].id);
-  }, [events, selectedEventId]);
+    if (!events.length || autoSelectionStarted.current) return;
+    autoSelectionStarted.current = true;
 
-  const selectedEvent = events.find((e) => e.id === selectedEventId);
-  const isCapturista = user?.role === "capturista";
+    let cancelled = false;
+    const selectClosestEvent = async () => {
+      let closestEvent = events[0];
+      try {
+        const permission = await Location.requestForegroundPermissionsAsync();
+        if (permission.status === "granted") {
+          const location = await Location.getCurrentPositionAsync({
+            accuracy: Location.Accuracy.Balanced,
+          });
+          const eventsWithCoordinates = events.filter(
+            (event) =>
+              Number.isFinite(event.latitude) &&
+              Number.isFinite(event.longitude),
+          );
+
+          if (eventsWithCoordinates.length) {
+            closestEvent = eventsWithCoordinates.reduce((closest, event) =>
+              distanceInKm(
+                location.coords.latitude,
+                location.coords.longitude,
+                event,
+              ) <
+                distanceInKm(
+                  location.coords.latitude,
+                  location.coords.longitude,
+                  closest,
+                )
+                ? event
+                : closest,
+            );
+          }
+        }
+      } catch (error) {
+        console.warn("No fue posible seleccionar el evento más cercano:", error);
+      }
+
+      if (!cancelled && !manuallySelected.current) {
+        setSelectedEventId(closestEvent.id);
+      }
+    };
+
+    void selectClosestEvent();
+    return () => {
+      cancelled = true;
+    };
+  }, [events]);
+
+  const handleEventChange = (eventId: string) => {
+    manuallySelected.current = true;
+    setSelectedEventId(eventId);
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refetch(), refetchEvents()]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
   const serviceIsOpen = (service: (typeof services)[number]) => {
     const now = Date.now();
     return service.active &&
@@ -31,76 +114,34 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <HomeHeader onLogout={handleLogout} />
+      <HomeHeader
+        onLogout={handleLogout}
+        events={events}
+        selectedEventId={selectedEventId}
+        onEventChange={handleEventChange}
+      />
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ padding: 24, paddingBottom: 40 }}
+        contentContainerStyle={{ paddingHorizontal: 24, paddingBottom: 20, paddingTop: 5 }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#981646"
+            colors={["#981646"]}
+          />
+        }
       >
         {Platform.OS === "web" && (user?.role === "super_admin" || user?.role === "enlace") && (
-          <Pressable onPress={() => router.push("/admin" as any)} className="mb-5 rounded-2xl bg-primary p-5 active:opacity-80">
+          <Pressable onPress={() => router.push("/admin" as any)} className="mb-2 rounded-2xl bg-primary p-5 active:opacity-80">
             <Text className="text-lg font-bold text-primary-foreground">Abrir panel administrativo</Text>
             <Text className="mt-1 text-primary-foreground/80">Consulta las solicitudes asignadas a tu unidad.</Text>
           </Pressable>
         )}
 
-        {/* Sección de eventos de atención */}
-        {events.length > 0 ? (
-          <View className="mb-5 gap-2">
-            <Text className="text-lg font-bold">Evento de atención</Text>
-            <Text className="text-sm text-muted-foreground">
-              {isCapturista
-                ? "Jornada activa donde registrarás las solicitudes."
-                : "Selecciona la jornada donde se registrará la solicitud."}
-            </Text>
-
-            {/* Banner del evento seleccionado (para capturistas) */}
-            {isCapturista && selectedEvent && (
-              <View className="mt-1 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-xs font-semibold text-primary">FOLIO DEL EVENTO</Text>
-                  <View className="rounded-full bg-primary/10 px-3 py-1">
-                    <Text className="text-xs font-bold text-primary">{selectedEvent.folioPrefix}-{new Date().getFullYear()}</Text>
-                  </View>
-                </View>
-                <Text className="mt-1 text-sm text-muted-foreground">
-                  {selectedEvent.locality} · {selectedEvent.venue}
-                </Text>
-              </View>
-            )}
-
-            <View className="mt-2 gap-2">
-              {events.map((event) => (
-                <Pressable
-                  key={event.id}
-                  onPress={() => setSelectedEventId(event.id)}
-                  className={`rounded-xl border p-4 ${selectedEventId === event.id ? "border-primary bg-primary/10" : "border-border bg-card"}`}
-                >
-                  <View className="flex-row items-start justify-between">
-                    <View className="flex-1">
-                      <Text className={selectedEventId === event.id ? "font-bold text-primary" : "font-semibold"}>
-                        {event.name}
-                      </Text>
-                      <Text className="mt-1 text-xs text-muted-foreground">
-                        {event.municipality} · {event.locality && `${event.locality} · `}{event.venue}
-                      </Text>
-                      <Text className="mt-0.5 text-xs text-muted-foreground">
-                        {new Date(event.startsAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}
-                        {event.endsAt && ` – ${new Date(event.endsAt).toLocaleString("es-MX", { dateStyle: "medium", timeStyle: "short" })}`}
-                      </Text>
-                    </View>
-                    {selectedEventId === event.id && (
-                      <View className="ml-3 rounded-full bg-primary px-2.5 py-1">
-                        <Text className="text-xs font-bold text-primary-foreground">{event.folioPrefix}</Text>
-                      </View>
-                    )}
-                  </View>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        ) : (
+        {!events.length && (
           <View className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-5">
             <Text className="font-bold text-amber-900">No hay un evento activo</Text>
             <Text className="mt-1 text-sm text-amber-800">Es necesario crear o activar un evento para registrar solicitudes.</Text>
@@ -125,34 +166,35 @@ export default function HomeScreen() {
               {services.map((service, index) => {
                 const open = serviceIsOpen(service);
                 return (
-                <Pressable
-                  key={service.id}
-                  className="mb-4 min-h-36 w-[48%] justify-between rounded-2xl border border-border bg-card p-4 active:opacity-70"
-                  disabled={!selectedEventId}
-                  onPress={() => handleNavigate({ id: service.id, title: service.name, subtitle: service.description, estado: open }, selectedEventId)}
-                >
-                  <View className="flex-row items-center justify-between">
-                    <View
-                      className="h-10 w-10 items-center justify-center rounded-full"
-                      style={{ backgroundColor: "#98164620" }}
-                    >
-                      <Text className="font-bold" style={{ color: "#981646" }}>
-                        {String(index + 1).padStart(2, "0")}
+                  <Pressable
+                    key={service.id}
+                    className="mb-4 min-h-36 w-[48%] justify-between rounded-2xl border border-border bg-card p-4 active:opacity-70"
+                    disabled={!selectedEventId}
+                    onPress={() => handleNavigate({ id: service.id, title: service.name, subtitle: service.description, estado: open }, selectedEventId)}
+                  >
+                    <View className="flex-row items-center justify-between">
+                      <View
+                        className="h-10 w-10 items-center justify-center rounded-full"
+                        style={{ backgroundColor: "#98164620" }}
+                      >
+                        <Text className="font-bold" style={{ color: "#981646" }}>
+                          {String(index + 1).padStart(2, "0")}
+                        </Text>
+                      </View>
+                      <Text className="text-xs font-semibold" style={{ color: open ? "#981646" : "#b45309" }}>
+                        {open ? "Abierto" : service.opensAt && new Date(service.opensAt).getTime() > Date.now() ? `Abre ${new Date(service.opensAt).toLocaleDateString("es-MX")}` : "Cerrado · acepta prioridad"}
                       </Text>
                     </View>
-                    <Text className="text-xs font-semibold" style={{ color: open ? "#981646" : "#b45309" }}>
-                      {open ? "Abierto" : service.opensAt && new Date(service.opensAt).getTime() > Date.now() ? `Abre ${new Date(service.opensAt).toLocaleDateString("es-MX")}` : "Cerrado · acepta prioridad"}
-                    </Text>
-                  </View>
 
-                  <View className="mt-5 flex-row items-end justify-between">
-                    <Text className="mr-2 flex-1 text-base font-semibold text-card-foreground">
-                      {service.name}
-                    </Text>
-                    <ChevronRight color="#981646" size={19} strokeWidth={2.5} />
-                  </View>
-                </Pressable>
-              );})}
+                    <View className="mt-5 flex-row items-end justify-between">
+                      <Text className="mr-2 flex-1 text-base font-semibold text-card-foreground">
+                        {service.name}
+                      </Text>
+                      <ChevronRight color="#981646" size={19} strokeWidth={2.5} />
+                    </View>
+                  </Pressable>
+                );
+              })}
             </View>
           </View>
         )}

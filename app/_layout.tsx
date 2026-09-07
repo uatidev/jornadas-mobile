@@ -1,3 +1,4 @@
+import "react-native-url-polyfill/auto";
 import "@/global.css";
 import { DeepLinkHandler } from "@/src/components/common/DeepLinkHandler";
 import { NAV_THEME } from "@/src/components/ui/lib/theme";
@@ -6,7 +7,7 @@ import {
   ThemeProvider as CustomThemeProvider,
   useTheme,
 } from "@/src/providers/ThemeProvider";
-import { ThemeProvider } from "@react-navigation/native";
+import { ThemeProvider } from "expo-router/react-navigation";
 import { PortalHost } from "@rn-primitives/portal";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Stack } from "expo-router";

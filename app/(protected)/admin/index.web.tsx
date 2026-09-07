@@ -1520,9 +1520,7 @@ function SuperAdminDashboard() {
                       Formulario general de solicitudes
                     </Text>
                     <Text className="mt-2 text-sm text-muted-foreground">
-                      Estos campos se presentan en todos los trámites antes del
-                      formulario específico. Versión actual:{" "}
-                      {globalForm.data?.version || 1}.
+                      {`Estos campos se presentan en todos los trámites antes del formulario específico. Versión actual: ${globalForm.data?.version || 1}.`}
                     </Text>
                   </View>
                   <View className="flex-row items-center justify-between rounded-xl border border-border bg-background p-4">

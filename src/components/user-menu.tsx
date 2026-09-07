@@ -15,7 +15,9 @@ import { cn } from "@/src/components/ui/lib/utils";
 import { Text } from "@/src/components/ui/text";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { UserData } from "@/src/services/auth";
+import { catalogService } from "@/src/services/catalog";
 import { filesService } from "@/src/services/files";
+import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { LogOutIcon, SettingsIcon } from "lucide-react-native";
 import * as React from "react";
@@ -35,6 +37,22 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
   const router = useRouter();
   const backgroundColor = THEME[colorScheme].background;
   const borderColor = THEME[colorScheme].border;
+  const units = useQuery({
+    queryKey: ["catalog", "units"],
+    queryFn: catalogService.listUnits,
+    enabled: Boolean(user?.unidadAdministrativaId),
+  });
+  const unit = units.data?.find(
+    (item) => item.id === user?.unidadAdministrativaId,
+  );
+  const roleLabels: Record<UserData["role"], string> = {
+    super_admin: "Superadministrador",
+    secretaria: "Secretaría",
+    enlace: "Enlace",
+    gestor: "Gestor",
+    capturista: "Capturista",
+    solicitante: "Solicitante",
+  };
 
   const UserMenuContent = () => (
     <View className="border-border gap-3 border-b p-3">
@@ -47,6 +65,21 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
           {user?.email ? (
             <Text className="text-muted-foreground text-sm font-normal leading-4">
               {user.email}
+            </Text>
+          ) : null}
+          {user?.role ? (
+            <Text className="mt-1 text-xs font-semibold text-primary">
+              {roleLabels[user.role]}
+            </Text>
+          ) : null}
+          {user?.unidadAdministrativaId ? (
+            <Text
+              className="mt-0.5 text-xs text-muted-foreground"
+              numberOfLines={2}
+            >
+              {units.isLoading
+                ? "Cargando unidad administrativa…"
+                : unit?.name || user.unidadAdministrativaId}
             </Text>
           ) : null}
         </View>
