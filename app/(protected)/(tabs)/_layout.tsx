@@ -2,11 +2,14 @@ import { THEME } from "@/src/components/ui/lib/theme";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import Monicon from "@monicon/native";
 import { Tabs } from "expo-router";
+import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
   const { colorScheme } = useTheme();
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const hideTabBar = Platform.OS === "web" && width >= 900;
   const backgroundColor = THEME[colorScheme].background;
   const borderColor = THEME[colorScheme].border;
   const iconColor = THEME[colorScheme].foreground;
@@ -18,6 +21,7 @@ export default function TabsLayout() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
+          display: hideTabBar ? "none" : "flex",
           backgroundColor,
           borderTopColor: borderColor,
           borderTopWidth: 1,
