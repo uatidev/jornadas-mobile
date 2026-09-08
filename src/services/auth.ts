@@ -96,7 +96,7 @@ const enrichUserWithProfile = async (userData: UserData): Promise<UserData> => {
     );
     return {
       ...userData,
-      nombre: profile.nombre || userData.nombre,
+      nombre: userData.nombre || profile.nombre,
       role: profile.rolSistema || profile.rol || userData.role,
       unidadAdministrativaId: profile.unidadAdministrativaId || undefined,
     };

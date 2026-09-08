@@ -1,4 +1,3 @@
-import { DrawerProvider } from "@/src/components/common/Drawer";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { Redirect, Stack } from "expo-router";
 
@@ -14,13 +13,12 @@ export default function ProtectedLayout() {
   }
 
   return (
-    <DrawerProvider>
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          animation: "slide_from_right",
-        }}
-      >
+    <Stack
+      screenOptions={{
+        headerShown: false,
+        animation: "slide_from_right",
+      }}
+    >
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen
           name="promocion-turistica"
@@ -49,7 +47,6 @@ export default function ProtectedLayout() {
           options={{ headerShown: false }}
         />
         <Stack.Screen name="admin" options={{ headerShown: false }} />
-      </Stack>
-    </DrawerProvider>
+    </Stack>
   );
 }

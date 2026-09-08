@@ -7,6 +7,8 @@ import { useActiveEvents, useServicesCatalog } from "@/src/hooks/useCatalog";
 import { useNewRequest } from "@/src/hooks/useHome";
 import { useAuth } from "@/src/providers/AuthProvider";
 import type { ProcedureService } from "@/src/types/catalog";
+import { useRouter } from "expo-router";
+import Monicon from "@monicon/native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -36,6 +38,7 @@ const getAvailability = (service: ProcedureService) => {
 
 export default function CapturistaWebDashboard() {
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const compact = width < 900;
   const { user } = useAuth();
   const { handleLogout, handleNavigate } = useNewRequest();
@@ -81,10 +84,25 @@ export default function CapturistaWebDashboard() {
             <Text className="mt-1 text-sm text-muted-foreground">Panel de captura</Text>
           </View>
 
-          <View className="mt-7 rounded-xl bg-primary px-4 py-3">
-            <Text className="font-semibold text-primary-foreground">Trámites y servicios</Text>
-            <Text className="mt-1 text-xs text-primary-foreground/80">Nueva solicitud</Text>
+          <View className="mt-7 flex-row items-center gap-3 rounded-xl bg-primary px-4 py-3">
+            <Monicon name="ci:note-edit" size={20} color="#ffffff" />
+            <View>
+              <Text className="font-semibold text-primary-foreground">Trámites y servicios</Text>
+              <Text className="mt-1 text-xs text-primary-foreground/80">Nueva solicitud</Text>
+            </View>
           </View>
+          <Pressable
+            onPress={() => router.push("/(protected)/(tabs)/mis-solicitudes" as any)}
+            className="mt-2 flex-row items-center gap-3 rounded-xl px-4 py-3 hover:bg-muted"
+          >
+            <Monicon name="ci:file-document" size={20} color="#71717a" />
+            <View>
+              <Text className="font-semibold">Mis solicitudes</Text>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Capturas por jornada
+              </Text>
+            </View>
+          </Pressable>
 
           <View className="mt-auto border-t border-border pt-5">
             <Text className="font-semibold">{user?.nombre}</Text>

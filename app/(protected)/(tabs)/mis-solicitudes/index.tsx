@@ -1,13 +1,23 @@
 import { Button } from "@/src/components/ui/button";
 import { THEME } from "@/src/components/ui/lib/theme";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/src/components/ui/select";
 import { Text } from "@/src/components/ui/text";
 import { useGetJornadasDelDia } from "@/src/hooks";
+import { useActiveEvents, useServicesCatalog } from "@/src/hooks/useCatalog";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import { useMemo } from "react";
+import { requestsService } from "@/src/services/requests";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Dimensions,
   Platform,
   RefreshControl,
   ScrollView,
@@ -15,21 +25,48 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get("window");
-
 export default function MisSolicitudesScreen() {
   const { user } = useAuth();
   const { colorScheme } = useTheme();
   const insets = useSafeAreaInsets();
   const primaryColor = THEME[colorScheme].primary;
   const primaryForegroundColor = THEME[colorScheme].primaryForeground;
-  const secondaryColor = THEME[colorScheme].secondary;
-  const mutedColor = THEME[colorScheme].muted;
   const backgroundColor = THEME[colorScheme].background;
   const foregroundColor = THEME[colorScheme].foreground;
   const borderColor = THEME[colorScheme].border;
   const mutedForegroundColor = THEME[colorScheme].mutedForeground;
   const opacity = colorScheme === "dark" ? 0.1 : 0.05;
+  const [selectedEventId, setSelectedEventId] = useState("");
+  const activeEvents = useActiveEvents();
+  const services = useServicesCatalog();
+  const capturistaRequests = useQuery({
+    queryKey: ["capturista", "requests", user?.id],
+    queryFn: () => requestsService.listByCapturista(user!.id),
+    enabled: user?.role === "capturista" && Boolean(user?.id),
+  });
+
+  const effectiveEventId =
+    selectedEventId &&
+      activeEvents.data?.some((event) => event.id === selectedEventId)
+      ? selectedEventId
+      : activeEvents.data?.[0]?.id || "";
+  const selectedEvent = activeEvents.data?.find(
+    (event) => event.id === effectiveEventId,
+  );
+  const serviceNames = useMemo(
+    () =>
+      Object.fromEntries(
+        (services.data || []).map((service) => [service.id, service.name]),
+      ),
+    [services.data],
+  );
+  const requestsForEvent = useMemo(
+    () =>
+      (capturistaRequests.data || []).filter(
+        (request) => request.eventId === effectiveEventId,
+      ),
+    [capturistaRequests.data, effectiveEventId],
+  );
 
   // Verificar si el usuario tiene los labels "secretaria" o "titular"
   const isSecretariaOrTitular = useMemo(() => {
@@ -47,10 +84,172 @@ export default function MisSolicitudesScreen() {
     error,
     refetch,
     isRefetching,
-  } = useGetJornadasDelDia(!isSecretariaOrTitular);
+  } = useGetJornadasDelDia(
+    !isSecretariaOrTitular,
+    user?.role !== "capturista",
+  );
 
   // Asegurar que jornadas siempre sea un array
   const jornadas = Array.isArray(jornadasData) ? jornadasData : [];
+
+  if (user?.role === "capturista") {
+    const loading =
+      activeEvents.isLoading || services.isLoading || capturistaRequests.isLoading;
+
+    return (
+      <View className="flex-1 bg-background">
+        <View
+          className="border-b border-border bg-background px-6 pb-5"
+          style={{ paddingTop: insets.top + 16 }}
+        >
+          <Text className="text-center text-xl font-bold">Mis solicitudes</Text>
+          <Text className="mt-1 text-center text-sm text-muted-foreground">
+            Consulta tus capturas por jornada activa.
+          </Text>
+        </View>
+
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{
+            paddingHorizontal: 24,
+            paddingTop: 20,
+            paddingBottom: insets.bottom + 24,
+          }}
+          refreshControl={
+            <RefreshControl
+              refreshing={capturistaRequests.isRefetching}
+              onRefresh={() => {
+                void Promise.all([
+                  capturistaRequests.refetch(),
+                  activeEvents.refetch(),
+                  services.refetch(),
+                ]);
+              }}
+            />
+          }
+        >
+          <View className="mx-auto w-full max-w-[672px] gap-5">
+            {activeEvents.data?.length ? (
+              <View className="gap-3">
+                <Text className="font-semibold">Selecciona una jornada</Text>
+                <Select
+                  value={
+                    selectedEvent
+                      ? { label: selectedEvent.name, value: selectedEvent.id }
+                      : undefined
+                  }
+                  onValueChange={(option) => {
+                    if (option?.value) setSelectedEventId(option.value);
+                  }}
+                >
+                  <SelectTrigger className="h-12 w-full rounded-xl px-4">
+                    <SelectValue placeholder="Selecciona una jornada activa" />
+                  </SelectTrigger>
+                  <SelectContent
+                    insets={{
+                      top: insets.top,
+                      bottom: insets.bottom,
+                      left: 16,
+                      right: 16,
+                    }}
+                  >
+                    <SelectGroup>
+                      {activeEvents.data.map((event) => (
+                        <SelectItem
+                          key={event.id}
+                          label={`${event.name} · ${event.municipality}`}
+                          value={event.id}
+                        >
+                          {event.name} · {event.municipality}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                {selectedEvent ? (
+                  <Text className="text-xs text-muted-foreground">
+                    {selectedEvent.venue} · {selectedEvent.locality}
+                  </Text>
+                ) : null}
+              </View>
+            ) : null}
+
+            {selectedEvent ? (
+              <View className="rounded-2xl bg-primary p-5">
+                <Text className="text-sm text-primary-foreground/80">
+                  Capturas realizadas en
+                </Text>
+                <Text className="mt-1 text-lg font-bold text-primary-foreground">
+                  {selectedEvent.name}
+                </Text>
+                <Text className="mt-4 text-4xl font-bold text-primary-foreground">
+                  {requestsForEvent.length}
+                </Text>
+                <Text className="mt-1 text-sm text-primary-foreground/80">
+                  {requestsForEvent.length === 1 ? "solicitud capturada" : "solicitudes capturadas"}
+                </Text>
+              </View>
+            ) : null}
+
+            {loading ? (
+              <View className="items-center py-12">
+                <ActivityIndicator color={primaryColor} />
+                <Text className="mt-3 text-muted-foreground">Cargando capturas...</Text>
+              </View>
+            ) : activeEvents.error || capturistaRequests.error ? (
+              <View className="rounded-2xl border border-destructive/30 bg-card p-5">
+                <Text className="font-semibold text-destructive">
+                  No fue posible cargar tus solicitudes.
+                </Text>
+                <Button className="mt-4" onPress={() => capturistaRequests.refetch()}>
+                  <Text>Reintentar</Text>
+                </Button>
+              </View>
+            ) : !activeEvents.data?.length ? (
+              <View className="items-center rounded-2xl border border-border bg-card px-5 py-12">
+                <Text className="text-lg font-bold">No hay jornadas activas</Text>
+                <Text className="mt-2 text-center text-muted-foreground">
+                  Cuando exista una jornada activa podrás consultar aquí tus capturas.
+                </Text>
+              </View>
+            ) : requestsForEvent.length ? (
+              <View className="gap-3">
+                <Text className="text-lg font-bold">Solicitudes capturadas</Text>
+                {requestsForEvent.map((request) => (
+                  <View
+                    key={request.id}
+                    className="rounded-2xl border border-border bg-card p-4"
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className="font-bold text-primary">{request.folio}</Text>
+                        <Text className="mt-1 font-semibold">
+                          {serviceNames[request.serviceId] || "Trámite no disponible"}
+                        </Text>
+                      </View>
+                      <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">
+                        {request.status.replaceAll("_", " ")}
+                      </Text>
+                    </View>
+                    <Text className="mt-3 text-xs text-muted-foreground">
+                      {new Date(request.requestedAt).toLocaleTimeString("es-MX")}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View className="items-center rounded-2xl border border-border bg-card px-5 py-12">
+                <Text className="text-lg font-bold">Sin capturas en esta jornada</Text>
+                <Text className="mt-2 text-center text-muted-foreground">
+                  Las solicitudes que registres aparecerán aquí.
+                </Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View className="flex-1 bg-background" style={{ position: "relative" }}>
@@ -268,9 +467,8 @@ export default function MisSolicitudesScreen() {
                   jornadas.map((jornada, index) => (
                     <View
                       key={jornada.id || index}
-                      className={`flex-row ${
-                        index < jornadas.length - 1 ? "border-b" : ""
-                      }`}
+                      className={`flex-row ${index < jornadas.length - 1 ? "border-b" : ""
+                        }`}
                       style={{
                         borderBottomColor:
                           index < jornadas.length - 1

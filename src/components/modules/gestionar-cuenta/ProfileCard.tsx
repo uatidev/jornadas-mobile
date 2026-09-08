@@ -1,12 +1,10 @@
-import { Avatar, AvatarFallback, AvatarImage } from "@/src/components/ui/avatar";
-import { Text } from "@/src/components/ui/text";
+import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
 import { THEME } from "@/src/components/ui/lib/theme";
+import { Text } from "@/src/components/ui/text";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { UserData } from "@/src/services/auth";
 import { filesService } from "@/src/services/files";
-import { BlurView } from "expo-blur";
-import { Platform, View, Image } from "react-native";
-import { useMemo } from "react";
+import { Image, View } from "react-native";
 
 interface ProfileCardProps {
   user: UserData | null;
@@ -15,19 +13,17 @@ interface ProfileCardProps {
 
 export function ProfileCard({ user, getInitials }: ProfileCardProps) {
   const { colorScheme } = useTheme();
-  const borderColor = THEME[colorScheme].border;
   const cardForegroundColor = THEME[colorScheme].cardForeground;
   const mutedForegroundColor = THEME[colorScheme].mutedForeground;
 
-  const cardBackgroundColor =
-    colorScheme === "dark"
-      ? "rgba(255, 255, 255, 0.05)"
-      : "rgba(255, 255, 255, 1)";
+  const fullName = [user?.nombre, user?.primerApellido, user?.segundoApellido]
+    .filter(Boolean)
+    .join(" ");
 
   // Generar URL de la imagen construyendo la URL completa manualmente
-  const imageUrl = useMemo(() => {
+  const imageUrl = (() => {
     let fileId: string | null = null;
-    
+
     // Prioridad 1: Si tenemos el fileId directamente
     if (user?.profilePhotoFileId) {
       fileId = user.profilePhotoFileId;
@@ -44,25 +40,22 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
         return user.profilePhoto;
       }
     }
-    
+
     // Si tenemos un fileId, construir la URL completa
     if (fileId) {
-      const url = filesService.getImageUrl(fileId, "images");
-      console.log("ProfileCard - FileId:", fileId);
-      console.log("ProfileCard - URL generada:", url);
-      return url;
+      return filesService.getImageUrl(fileId, "images");
     }
-    
+
     return null;
-  }, [user?.profilePhoto, user?.profilePhotoFileId]);
+  })();
 
-  // Debug: verificar si hay foto de perfil
-  console.log("ProfileCard - user.profilePhoto:", user?.profilePhoto);
-  console.log("ProfileCard - user.profilePhotoFileId:", user?.profilePhotoFileId);
-  console.log("ProfileCard - imageUrl generada:", imageUrl);
-
-  const cardContent = (
-    <View className="flex-row items-center gap-4 px-4 py-5">
+  return (
+    <View
+      className="flex-row items-center gap-4 overflow-hidden rounded-2xl border border-border bg-card px-4 py-5"
+      style={{
+        borderRadius: 16,
+      }}
+    >
       {imageUrl ? (
         <View className="size-16 rounded-full overflow-hidden bg-primary items-center justify-center">
           <Image
@@ -78,12 +71,6 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
                 fileId: user?.profilePhotoFileId,
               };
               console.error("Error cargando imagen de perfil:", errorInfo);
-            }}
-            onLoadStart={() => {
-              console.log("Iniciando carga de imagen:", imageUrl);
-            }}
-            onLoadEnd={() => {
-              console.log("Carga de imagen finalizada");
             }}
           />
         </View>
@@ -104,7 +91,7 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
           className="text-lg font-semibold"
           style={{ color: cardForegroundColor }}
         >
-          {user?.nombre || "Usuario"}
+          {fullName || "Usuario"}
         </Text>
         {user?.email && (
           <Text
@@ -158,32 +145,6 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
         ) : null}
       </View>
     </View>
-  );
-
-  if (Platform.OS === "web") {
-    return (
-      <View
-        className="rounded-lg overflow-hidden"
-        style={{
-          backgroundColor: cardBackgroundColor,
-          borderColor: borderColor,
-          borderWidth: 0.5,
-        }}
-      >
-        {cardContent}
-      </View>
-    );
-  }
-
-  return (
-    <BlurView
-      intensity={colorScheme === "dark" ? 20 : 30}
-      tint={colorScheme === "dark" ? "dark" : "light"}
-      className="rounded-lg overflow-hidden"
-      style={{ borderColor: borderColor, borderWidth: 0.5 }}
-    >
-      {cardContent}
-    </BlurView>
   );
 }
 

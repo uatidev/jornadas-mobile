@@ -21,9 +21,9 @@ function Switch({
     >
       <SwitchPrimitives.Thumb
         className={cn(
-          "bg-background size-4 rounded-full transition-transform",
+          "bg-background size-4 rounded-full",
           Platform.select({
-            web: "pointer-events-none block ring-0",
+            web: "pointer-events-none block ring-0 transition-transform",
           }),
           props.checked
             ? "dark:bg-primary-foreground translate-x-3.5"

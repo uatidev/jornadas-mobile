@@ -1,4 +1,3 @@
-import { useDrawer } from "@/src/components/common/Drawer";
 import { Button } from "@/src/components/ui/button";
 import { THEME } from "@/src/components/ui/lib/theme";
 import {
@@ -14,7 +13,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { AttentionEvent } from "@/src/types/catalog";
 import Monicon from "@monicon/native";
-import { View } from "react-native";
+import { Platform, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 interface HomeHeaderProps {
@@ -32,9 +31,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
 }) => {
   const { user } = useAuth();
   const { colorScheme } = useTheme();
-  const { open: openDrawer } = useDrawer();
   const insets = useSafeAreaInsets();
-  const iconColor = THEME[colorScheme].foreground;
   const selectedEvent = events.find((event) => event.id === selectedEventId);
 
   const formatSchedule = (event: AttentionEvent) => {
@@ -70,15 +67,6 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
         // borderColor: "red",
         // borderWidth: 1
       }}>
-        <Button
-          variant="ghost"
-          size="icon"
-          onPress={openDrawer}
-          className="rounded-full"
-        >
-          <Monicon name="ic:outline-menu" size={24} color={iconColor} />
-        </Button>
-
         <View className="mx-2 flex-1" style={{
           // backgroundColor: "transparent",
           // borderColor: "red",
@@ -145,7 +133,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
           </Select>
         </View>
 
-        <View className="flex-row items-center gap-2">
+        {Platform.OS === "web" ? <View className="flex-row items-center gap-2">
           {/* <Button
             variant="ghost"
             size="icon"
@@ -163,7 +151,21 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
             />
           </Button> */}
           <UserMenu user={user} onLogout={onLogout} />
-        </View>
+        </View> : (
+          <Button
+            variant="ghost"
+            size="icon"
+            onPress={onLogout}
+            className="rounded-full"
+            accessibilityLabel="Cerrar sesión"
+          >
+            <Monicon
+              name="ic:outline-logout"
+              size={24}
+              color={THEME[colorScheme].destructive}
+            />
+          </Button>
+        )}
       </View>
 
       {/* <Text className="text-2xl font-bold text-foreground">

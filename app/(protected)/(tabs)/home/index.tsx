@@ -7,7 +7,22 @@ import * as Location from "expo-location";
 import { useRouter } from "expo-router";
 import { ChevronRight } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, Text, View } from "react-native";
+import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
+
+const DEFAULT_SERVICE_IMAGE = require("@/src/assets/images/logo-turismo.png");
+
+function ServiceCardImage({ imageUrl }: { imageUrl?: string }) {
+  const [hasError, setHasError] = useState(false);
+
+  return (
+    <Image
+      source={imageUrl && !hasError ? { uri: imageUrl } : DEFAULT_SERVICE_IMAGE}
+      resizeMode={imageUrl && !hasError ? "cover" : "contain"}
+      style={[StyleSheet.absoluteFill, { backgroundColor: "#ffffff" }]}
+      onError={() => setHasError(true)}
+    />
+  );
+}
 
 const distanceInKm = (
   latitude: number,
@@ -37,6 +52,7 @@ export default function HomeScreen() {
   const { data: events = [], refetch: refetchEvents } = useActiveEvents();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [selectedEventId, setSelectedEventId] = useState("");
+  const [renderedAt] = useState(() => Date.now());
   const autoSelectionStarted = useRef(false);
   const manuallySelected = useRef(false);
 
@@ -106,7 +122,7 @@ export default function HomeScreen() {
   };
 
   const serviceIsOpen = (service: (typeof services)[number]) => {
-    const now = Date.now();
+    const now = renderedAt;
     return service.active &&
       (!service.opensAt || now >= new Date(service.opensAt).getTime()) &&
       (!service.closesAt || now <= new Date(service.closesAt).getTime());
@@ -165,32 +181,70 @@ export default function HomeScreen() {
             <View className="flex-row flex-wrap justify-between">
               {services.map((service, index) => {
                 const open = serviceIsOpen(service);
+                const opensLater = Boolean(
+                  service.opensAt &&
+                    new Date(service.opensAt).getTime() > renderedAt,
+                );
                 return (
                   <Pressable
                     key={service.id}
-                    className="mb-4 min-h-36 w-[48%] justify-between rounded-2xl border border-border bg-card p-4 active:opacity-70"
+                    className="relative mb-4 min-h-40 w-full justify-between overflow-hidden rounded-2xl border border-border bg-primary p-3 active:opacity-70 sm:w-[48%]"
                     disabled={!selectedEventId}
                     onPress={() => handleNavigate({ id: service.id, title: service.name, subtitle: service.description, estado: open }, selectedEventId)}
                   >
+                    <ServiceCardImage
+                      key={service.imageUrl || "default"}
+                      imageUrl={service.imageUrl}
+                    />
+                    <View
+                      pointerEvents="none"
+                      style={[
+                        StyleSheet.absoluteFill,
+                        {
+                          backgroundColor: service.imageUrl
+                            ? "rgba(0, 0, 0, 0.58)"
+                            : "rgba(0, 0, 0, 0.28)",
+                        },
+                      ]}
+                    />
                     <View className="flex-row items-center justify-between">
                       <View
-                        className="h-10 w-10 items-center justify-center rounded-full"
-                        style={{ backgroundColor: "#98164620" }}
+                        className="h-10 w-10 items-center justify-center rounded-full bg-white/90"
                       >
                         <Text className="font-bold" style={{ color: "#981646" }}>
                           {String(index + 1).padStart(2, "0")}
                         </Text>
                       </View>
-                      <Text className="text-xs font-semibold" style={{ color: open ? "#981646" : "#b45309" }}>
-                        {open ? "Abierto" : service.opensAt && new Date(service.opensAt).getTime() > Date.now() ? `Abre ${new Date(service.opensAt).toLocaleDateString("es-MX")}` : "Cerrado · acepta prioridad"}
-                      </Text>
+                      <View
+                        className="max-w-[68%] items-center rounded-xl px-3 py-1.5"
+                        style={{
+                          backgroundColor: open ? "rgba(255,255,255,0.92)" : "rgba(254,243,199,0.95)",
+                        }}
+                      >
+                        <Text
+                          className="text-center text-xs font-bold"
+                          style={{ color: open ? "#981646" : "#92400e" }}
+                        >
+                          {open ? "Abierto" : opensLater ? "Abre el" : "Cerrado"}
+                        </Text>
+                        {!open ? (
+                          <Text
+                            className="mt-0.5 text-center text-[10px] leading-3"
+                            style={{ color: "#92400e" }}
+                          >
+                            {opensLater
+                              ? new Date(service.opensAt!).toLocaleDateString("es-MX")
+                              : "Acepta prioridad"}
+                          </Text>
+                        ) : null}
+                      </View>
                     </View>
 
                     <View className="mt-5 flex-row items-end justify-between">
-                      <Text className="mr-2 flex-1 text-base font-semibold text-card-foreground">
+                      <Text className="mr-2 flex-1 text-base font-semibold text-white">
                         {service.name}
                       </Text>
-                      <ChevronRight color="#981646" size={19} strokeWidth={2.5} />
+                      <ChevronRight color="#ffffff" size={19} strokeWidth={2.5} />
                     </View>
                   </Pressable>
                 );

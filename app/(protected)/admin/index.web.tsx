@@ -19,6 +19,12 @@ import {
 } from "@/src/components/modules/admin/FormFieldBuilder.web";
 import { RequirementBuilder } from "@/src/components/modules/admin/RequirementBuilder.web";
 import { TargetAudienceBuilder } from "@/src/components/modules/admin/TargetAudienceBuilder.web";
+import {
+  RequestsBarChart,
+  StatusPieChart,
+  type DashboardChartDatum,
+} from "@/src/components/modules/admin/DashboardCharts.web";
+import { AdminDataTable } from "@/src/components/modules/admin/AdminDataTable.web";
 import type {
   AdministrativeUnit,
   AttentionEvent,
@@ -27,6 +33,7 @@ import type {
   ServiceType,
 } from "@/src/types/catalog";
 import React, { Suspense } from "react";
+import Monicon from "@monicon/native";
 
 // Importación dinámica para evitar que Leaflet se ejecute en el servidor (SSR)
 const LocationPicker = React.lazy(() =>
@@ -102,18 +109,18 @@ const EMPTY_EVENT: AttentionEventInput = {
 };
 
 const nav: { key: Section; label: string; icon: string }[] = [
-  { key: "resumen", label: "Resumen", icon: "▦" },
-  { key: "formulario", label: "Formulario global", icon: "✎" },
-  { key: "eventos", label: "Eventos de atención", icon: "⌖" },
-  { key: "unidades", label: "Unidades administrativas", icon: "▦" },
-  { key: "tramites", label: "Trámites y servicios", icon: "☰" },
-  { key: "usuarios", label: "Usuarios y enlaces", icon: "◉" },
-  { key: "solicitudes", label: "Solicitudes", icon: "▤" },
+  { key: "resumen", label: "Resumen", icon: "ci:chart-pie" },
+  { key: "formulario", label: "Formulario global", icon: "ci:note-edit" },
+  { key: "eventos", label: "Eventos de atención", icon: "ci:calendar-event" },
+  { key: "unidades", label: "Unidades administrativas", icon: "ci:building-03" },
+  { key: "tramites", label: "Trámites y servicios", icon: "ci:list-checklist" },
+  { key: "usuarios", label: "Usuarios y enlaces", icon: "ci:users-group" },
+  { key: "solicitudes", label: "Solicitudes", icon: "ci:file-document" },
 ];
 const secretaryNav: { key: SecretarySection; label: string; icon: string }[] = [
-  { key: "resumen", label: "Resumen ejecutivo", icon: "◦" },
-  { key: "eventos", label: "Eventos y mapa", icon: "⌖" },
-  { key: "solicitudes", label: "Reporte de solicitudes", icon: "▤" },
+  { key: "resumen", label: "Resumen ejecutivo", icon: "ci:chart-pie" },
+  { key: "eventos", label: "Eventos y mapa", icon: "ci:map" },
+  { key: "solicitudes", label: "Reporte de solicitudes", icon: "ci:file-document" },
 ];
 
 function Field({
@@ -235,38 +242,6 @@ function OperationalSidebar({
           </Text>
         </View>
         <Button variant="outline" onPress={logout}><Text>Cerrar sesión</Text></Button>
-      </View>
-    </View>
-  );
-}
-
-function HorizontalBarChart({
-  title,
-  data,
-}: {
-  title: string;
-  data: { label: string; value: number; color?: string }[];
-}) {
-  const maximum = Math.max(1, ...data.map((item) => item.value));
-  return (
-    <View className="min-w-80 flex-1 rounded-2xl border border-border bg-card p-5">
-      <Text className="mb-5 text-lg font-bold">{title}</Text>
-      <View className="gap-4">
-        {data.map((item) => (
-          <View key={item.label} className="gap-1.5">
-            <View className="flex-row justify-between gap-3">
-              <Text className="flex-1 text-sm" numberOfLines={1}>{item.label}</Text>
-              <Text className="font-bold">{item.value}</Text>
-            </View>
-            <View className="h-3 overflow-hidden rounded-full bg-muted">
-              <View
-                className="h-full rounded-full"
-                style={{ width: `${(item.value / maximum) * 100}%`, backgroundColor: item.color || "#981646" }}
-              />
-            </View>
-          </View>
-        ))}
-        {!data.length ? <Text className="text-sm text-muted-foreground">Sin datos en el periodo.</Text> : null}
       </View>
     </View>
   );
@@ -961,9 +936,11 @@ function SecretaryDashboard() {
               onPress={() => setSection(item.key)}
               className={`flex-row items-center gap-3 rounded-xl px-4 py-3 ${section === item.key ? "bg-primary" : "hover:bg-muted"}`}
             >
-              <Text className={section === item.key ? "text-primary-foreground" : "text-muted-foreground"}>
-                {item.icon}
-              </Text>
+              <Monicon
+                name={item.icon}
+                size={20}
+                color={section === item.key ? "#ffffff" : "#71717a"}
+              />
               <Text className={`font-medium ${section === item.key ? "text-primary-foreground" : ""}`}>
                 {item.label}
               </Text>
@@ -1019,10 +996,33 @@ function SecretaryDashboard() {
             <Metric label="No continuaron" value={didNotContinue} note="Rechazadas o canceladas con motivo" />
             <Metric label="Prioridad al reabrir" value={priority} note="Registradas fuera de convocatoria" />
           </View>
-          <View className="flex-row flex-wrap gap-4">
-            <HorizontalBarChart title="Solicitudes por estatus" data={statusChart} />
-            <HorizontalBarChart title="Trámites más solicitados" data={ranking.slice(0, 6).map((item) => ({ label: item.name, value: item.count }))} />
-            <HorizontalBarChart title="Solicitudes por evento" data={eventChart} />
+          <View className="grid grid-cols-2 gap-4">
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <Text className="text-xl font-bold">Solicitudes por estatus</Text>
+              <Text className="mt-1 text-sm text-muted-foreground">
+                Distribución durante el periodo seleccionado.
+              </Text>
+              <StatusPieChart data={statusChart} />
+            </View>
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <Text className="text-xl font-bold">Trámites más solicitados</Text>
+              <Text className="mt-1 text-sm text-muted-foreground">
+                Comparativo de los seis trámites con mayor demanda.
+              </Text>
+              <RequestsBarChart
+                data={ranking.slice(0, 6).map((item) => ({
+                  label: item.name,
+                  value: item.count,
+                }))}
+              />
+            </View>
+            <View className="col-span-2 rounded-2xl border border-border bg-card p-5">
+              <Text className="text-xl font-bold">Solicitudes por evento</Text>
+              <Text className="mt-1 text-sm text-muted-foreground">
+                Actividad de las jornadas incluidas en el periodo.
+              </Text>
+              <RequestsBarChart data={eventChart} />
+            </View>
           </View>
           <View className="rounded-2xl border border-border bg-card p-5">
             <Text className="text-xl font-bold">Productividad de capturistas</Text>
@@ -1365,6 +1365,29 @@ function SuperAdminDashboard() {
     requests.isLoading ||
     events.isLoading ||
     globalForm.isLoading;
+  const statusChartData = useMemo<DashboardChartDatum[]>(() => {
+    const counts = new Map<string, number>();
+    for (const request of requests.data || []) {
+      const label = (request.status || "sin estatus")
+        .replaceAll("_", " ")
+        .replace(/^./, (letter) => letter.toUpperCase());
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return Array.from(counts, ([label, value]) => ({ label, value }));
+  }, [requests.data]);
+  const serviceChartData = useMemo<DashboardChartDatum[]>(() => {
+    const counts = new Map<string, number>();
+    const names = Object.fromEntries(
+      (services.data || []).map((service) => [service.id, service.name]),
+    );
+    for (const request of requests.data || []) {
+      const label = names[request.serviceId] || "Trámite no disponible";
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return Array.from(counts, ([label, value]) => ({ label, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 6);
+  }, [requests.data, services.data]);
 
   return (
     <View className="h-screen flex-row bg-muted/30">
@@ -1386,15 +1409,11 @@ function SuperAdminDashboard() {
               }}
               className={`flex-row items-center gap-3 rounded-xl px-4 py-3 ${section === item.key ? "bg-primary" : "hover:bg-muted"}`}
             >
-              <Text
-                className={
-                  section === item.key
-                    ? "text-primary-foreground"
-                    : "text-muted-foreground"
-                }
-              >
-                {item.icon}
-              </Text>
+              <Monicon
+                name={item.icon}
+                size={20}
+                color={section === item.key ? "#ffffff" : "#71717a"}
+              />
               <Text
                 className={`font-medium ${section === item.key ? "text-primary-foreground" : ""}`}
               >
@@ -1487,6 +1506,22 @@ function SuperAdminDashboard() {
                       value={requests.data?.length || 0}
                       note="Registros visibles"
                     />
+                  </View>
+                  <View className="grid grid-cols-2 gap-4">
+                    <View className="rounded-2xl border border-border bg-card p-6">
+                      <Text className="text-lg font-bold">Solicitudes por estatus</Text>
+                      <Text className="mt-1 text-sm text-muted-foreground">
+                        Distribución actual de los registros.
+                      </Text>
+                      <StatusPieChart data={statusChartData} />
+                    </View>
+                    <View className="rounded-2xl border border-border bg-card p-6">
+                      <Text className="text-lg font-bold">Trámites más solicitados</Text>
+                      <Text className="mt-1 text-sm text-muted-foreground">
+                        Los seis trámites con mayor demanda.
+                      </Text>
+                      <RequestsBarChart data={serviceChartData} />
+                    </View>
                   </View>
                   <View className="rounded-2xl border border-border bg-card p-6">
                     <Text className="text-lg font-bold">Accesos rápidos</Text>
@@ -1879,200 +1914,79 @@ function SuperAdminDashboard() {
                 </View>
               )}
               {section === "eventos" && (
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <View className="flex-row bg-muted px-5 py-3">
-                    <Text className="flex-1 text-xs font-bold">
-                      EVENTO / FOLIO
-                    </Text>
-                    <Text className="w-48 text-xs font-bold">
-                      LOCALIDAD / MUNICIPIO
-                    </Text>
-                    <Text className="w-48 text-xs font-bold">FECHA Y HORA</Text>
-                    <Text className="w-28 text-xs font-bold">ESTADO</Text>
-                  </View>
-                  {events.data?.length ? (
-                    events.data.map((item) => (
-                      <Pressable
-                        key={item.id}
-                        onPress={() => {
-                          setEventForm(item);
-                          setEventModal(true);
-                        }}
-                        className="flex-row items-center border-t border-border px-5 py-4 hover:bg-muted/40"
-                      >
-                        <View className="flex-1">
-                          <Text className="font-semibold">{item.name}</Text>
-                          <Text className="mt-1 text-xs text-muted-foreground">
-                            Folio {item.folioPrefix}
-                          </Text>
-                        </View>
-                        <View className="w-48">
-                          <Text>{item.locality}</Text>
-                          <Text className="mt-1 text-xs text-muted-foreground">
-                            {item.municipality}
-                          </Text>
-                        </View>
-                        <Text className="w-48 text-sm">
-                          {formatEventDateTime(item.startsAt)}
-                        </Text>
-                        <View className="w-40 items-end gap-2">
-                          <Text className={`font-semibold ${getEventStatus(item) === "Activo" ? "text-emerald-600" : "text-muted-foreground"}`}>
-                            {getEventStatus(item)}
-                          </Text>
-                          {getEventStatus(item) !== "Finalizado" ? (
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={finishEvent.isPending}
-                              onPress={(pressEvent) => {
-                                pressEvent.stopPropagation();
-                                finishEvent.mutate(item.id);
-                              }}
-                            >
-                              <Text>Finalizar ahora</Text>
-                            </Button>
-                          ) : null}
-                        </View>
-                      </Pressable>
-                    ))
-                  ) : (
-                    <Text className="p-10 text-center text-muted-foreground">
-                      Todavía no hay eventos. Crea el primero para comenzar a
-                      registrar atenciones.
-                    </Text>
-                  )}
-                </View>
+                <AdminDataTable
+                  data={events.data || []}
+                  getRowId={(item) => item.id}
+                  searchPlaceholder="Buscar evento, folio o municipio..."
+                  emptyMessage="Todavía no hay eventos registrados."
+                  filterLabel="Todos los estados"
+                  filterOptions={["Activo", "Próximo", "Finalizado"].map((value) => ({ label: value, value }))}
+                  getFilterValue={getEventStatus}
+                  columns={[
+                    { key: "name", title: "EVENTO", value: (item) => item.name, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs text-muted-foreground">Folio {item.folioPrefix}</Text></View> },
+                    { key: "place", title: "LOCALIDAD / MUNICIPIO", value: (item) => `${item.locality} ${item.municipality}`, render: (item) => <View><Text>{item.locality}</Text><Text className="text-xs text-muted-foreground">{item.municipality}</Text></View> },
+                    { key: "date", title: "FECHA Y HORA", value: (item) => new Date(item.startsAt).getTime(), render: (item) => <Text className="text-sm">{formatEventDateTime(item.startsAt)}</Text> },
+                    { key: "status", title: "ESTADO", value: getEventStatus, render: (item) => <Text className={`font-semibold ${getEventStatus(item) === "Activo" ? "text-emerald-600" : "text-muted-foreground"}`}>{getEventStatus(item)}</Text> },
+                  ]}
+                  renderActions={(item) => <View className="flex-row justify-end gap-2"><Button size="sm" variant="outline" onPress={() => { setEventForm(item); setEventModal(true); }}><Text>Editar</Text></Button>{getEventStatus(item) !== "Finalizado" ? <Button size="sm" variant="outline" disabled={finishEvent.isPending} onPress={() => finishEvent.mutate(item.id)}><Text>Finalizar</Text></Button> : null}</View>}
+                />
               )}
               {section === "unidades" && (
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <View className="flex-row bg-muted px-5 py-3">
-                    <Text className="w-40 text-xs font-bold">CLAVE</Text>
-                    <Text className="flex-1 text-xs font-bold">UNIDAD ADMINISTRATIVA</Text>
-                    <Text className="w-72 text-xs font-bold">CONTACTO</Text>
-                    <Text className="w-28 text-xs font-bold">ESTADO</Text>
-                  </View>
-                  {units.data?.length ? units.data.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => {
-                        setUnitForm({
-                          id: item.id,
-                          code: item.code,
-                          name: item.name,
-                          description: item.description || "",
-                          contactEmail: item.contactEmail || "",
-                          active: item.active,
-                        });
-                        setUnitModal(true);
-                      }}
-                      className="flex-row items-center border-t border-border px-5 py-4 hover:bg-muted/40"
-                    >
-                      <Text className="w-40 font-semibold">{item.code}</Text>
-                      <View className="flex-1">
-                        <Text className="font-semibold">{item.name}</Text>
-                        <Text className="mt-1 text-xs text-muted-foreground">{item.description || "Sin descripción"}</Text>
-                      </View>
-                      <Text className="w-72 text-sm">{item.contactEmail || "—"}</Text>
-                      <Text className={`w-28 font-semibold ${item.active ? "text-emerald-600" : "text-muted-foreground"}`}>
-                        {item.active ? "Activa" : "Inactiva"}
-                      </Text>
-                    </Pressable>
-                  )) : (
-                    <View className="items-center gap-3 p-10">
-                      <Text className="font-semibold">No hay unidades administrativas</Text>
-                      <Text className="text-center text-sm text-muted-foreground">Crea la primera unidad para poder registrar trámites y asignar gestores.</Text>
-                      <Button onPress={openNewUnit}><Text>+ Crear primera unidad</Text></Button>
-                    </View>
-                  )}
-                </View>
+                <AdminDataTable
+                  data={units.data || []}
+                  getRowId={(item) => item.id}
+                  searchPlaceholder="Buscar unidad, clave o contacto..."
+                  filterLabel="Todos los estados"
+                  filterOptions={[{ label: "Activas", value: "active" }, { label: "Inactivas", value: "inactive" }]}
+                  getFilterValue={(item) => item.active ? "active" : "inactive"}
+                  emptyMessage="No hay unidades administrativas."
+                  columns={[
+                    { key: "code", title: "CLAVE", value: (item) => item.code, width: 130 },
+                    { key: "name", title: "UNIDAD ADMINISTRATIVA", value: (item) => `${item.name} ${item.description || ""}`, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs text-muted-foreground">{item.description || "Sin descripción"}</Text></View> },
+                    { key: "contact", title: "CONTACTO", value: (item) => item.contactEmail || "—", width: 260 },
+                    { key: "status", title: "ESTADO", value: (item) => item.active ? "Activa" : "Inactiva", width: 110, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-muted-foreground"}`}>{item.active ? "Activa" : "Inactiva"}</Text> },
+                  ]}
+                  renderActions={(item) => <Button size="sm" variant="outline" onPress={() => { setUnitForm({ id: item.id, code: item.code, name: item.name, description: item.description || "", contactEmail: item.contactEmail || "", active: item.active }); setUnitModal(true); }}><Text>Editar</Text></Button>}
+                />
               )}
               {section === "tramites" && (
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <View className="flex-row bg-muted px-5 py-3">
-                    <Text className="w-32 text-xs font-bold">CLAVE</Text>
-                    <Text className="flex-1 text-xs font-bold">NOMBRE</Text>
-                    <Text className="w-64 text-xs font-bold">UNIDAD</Text>
-                    <Text className="w-28 text-xs font-bold">ESTADO</Text>
-                  </View>
-                  {services.data?.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      onPress={() => openEdit(item)}
-                      className="flex-row items-center border-t border-border px-5 py-4 hover:bg-muted/40"
-                    >
-                      <Text className="w-32 text-sm font-semibold">
-                        {item.code}
-                      </Text>
-                      <View className="flex-1">
-                        <Text className="font-semibold">{item.name}</Text>
-                        <Text className="mt-1 text-xs text-muted-foreground">
-                          {item.type}
-                        </Text>
-                      </View>
-                      <Text className="w-64 text-sm">
-                        {unitNames[item.unitId] || item.unitId}
-                      </Text>
-                      <Text
-                        className={`w-28 text-sm font-semibold ${item.active ? "text-emerald-600" : "text-muted-foreground"}`}
-                      >
-                        {item.active ? "Activo" : "Inactivo"}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                <AdminDataTable
+                  data={services.data || []}
+                  getRowId={(item) => item.id}
+                  searchPlaceholder="Buscar trámite, clave o unidad..."
+                  filterLabel="Todos los tipos"
+                  filterOptions={["tramite", "servicio", "programa"].map((value) => ({ label: value[0].toUpperCase() + value.slice(1), value }))}
+                  getFilterValue={(item) => item.type}
+                  columns={[
+                    { key: "code", title: "CLAVE", value: (item) => item.code, width: 120 },
+                    { key: "name", title: "NOMBRE", value: (item) => `${item.name} ${item.type}`, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs capitalize text-muted-foreground">{item.type}</Text></View> },
+                    { key: "unit", title: "UNIDAD", value: (item) => unitNames[item.unitId] || item.unitId, width: 260 },
+                    { key: "status", title: "ESTADO", value: (item) => item.active ? "Activo" : "Inactivo", width: 110, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-muted-foreground"}`}>{item.active ? "Activo" : "Inactivo"}</Text> },
+                  ]}
+                  renderActions={(item) => <Button size="sm" variant="outline" onPress={() => openEdit(item)}><Text>Editar</Text></Button>}
+                />
               )}
               {section === "usuarios" && (
-                <View className="overflow-hidden rounded-2xl border border-border bg-card">
-                  <View className="flex-row bg-muted px-5 py-3">
-                    <Text className="flex-1 text-xs font-bold">USUARIO</Text>
-                    <Text className="w-48 text-xs font-bold">ROL</Text>
-                    <Text className="w-72 text-xs font-bold">UNIDAD</Text>
-                    <Text className="w-24 text-xs font-bold">ESTADO</Text>
-                  </View>
-                  {profiles.data?.map((item) => (
-                    <Pressable
-                      key={item.id}
-                      disabled={item.role === "super_admin"}
-                      onPress={() => {
-                        if (item.role === "super_admin") return;
-                        setInvite({
-                          id: item.id,
-                          name: item.name,
-                          email: item.email,
-                          password: "",
-                          unitId: item.unitId || units.data?.[0]?.id || "",
-                          role: item.role as "secretaria" | "enlace" | "gestor" | "capturista",
-                          active: item.active,
-                        });
-                        setUserModal(true);
-                      }}
-                      className="flex-row items-center border-t border-border px-5 py-4"
-                    >
-                      <View className="flex-1">
-                        <Text className="font-semibold">{item.name}</Text>
-                        <Text className="text-xs text-muted-foreground">
-                          {item.email}
-                        </Text>
-                      </View>
-                      <Text className="w-48 capitalize">
-                        {item.role.replace("_", " ")}
-                      </Text>
-                      <Text className="w-72">
-                        {item.unitId ? unitNames[item.unitId] : "Acceso global"}
-                      </Text>
-                      <Text
-                        className={`w-24 font-semibold ${item.active ? "text-emerald-600" : "text-red-600"}`}
-                      >
-                        {item.active ? "Activo" : "Inactivo"}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
+                <AdminDataTable
+                  data={profiles.data || []}
+                  getRowId={(item) => item.id}
+                  searchPlaceholder="Buscar usuario, correo o unidad..."
+                  filterLabel="Todos los roles"
+                  filterOptions={["capturista", "gestor", "enlace", "secretaria", "super_admin"].map((value) => ({ label: value.replace("_", " "), value }))}
+                  getFilterValue={(item) => item.role}
+                  columns={[
+                    { key: "name", title: "USUARIO", value: (item) => `${item.name} ${item.email}`, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs text-muted-foreground">{item.email}</Text></View> },
+                    { key: "role", title: "ROL", value: (item) => item.role, width: 170, render: (item) => <Text className="capitalize">{item.role.replace("_", " ")}</Text> },
+                    { key: "unit", title: "UNIDAD", value: (item) => item.unitId ? unitNames[item.unitId] : "Acceso global", width: 260 },
+                    { key: "status", title: "ESTADO", value: (item) => item.active ? "Activo" : "Inactivo", width: 100, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-red-600"}`}>{item.active ? "Activo" : "Inactivo"}</Text> },
+                  ]}
+                  renderActions={(item) => item.role === "super_admin" ? <Text className="text-xs text-muted-foreground">Protegido</Text> : <Button size="sm" variant="outline" onPress={() => { setInvite({ id: item.id, name: item.name, email: item.email, password: "", unitId: item.unitId || units.data?.[0]?.id || "", role: item.role as "secretaria" | "enlace" | "gestor" | "capturista", active: item.active }); setUserModal(true); }}><Text>Editar</Text></Button>}
+                />
               )}
               {section === "solicitudes" && (
                 <View className="gap-4">
                   {/* Filtro por evento */}
-                  <View className="flex-row items-center gap-3">
+                  <View className="hidden flex-row items-center gap-3">
                     <Text className="text-sm font-semibold">
                       Filtrar por evento:
                     </Text>
@@ -2107,7 +2021,24 @@ function SuperAdminDashboard() {
                       </Text>
                     )}
                   </View>
-                  <View className="overflow-hidden rounded-2xl border border-border bg-card">
+                  <AdminDataTable
+                    data={requests.data || []}
+                    getRowId={(item) => item.id}
+                    searchPlaceholder="Buscar folio, unidad o estatus..."
+                    filterLabel="Todos los eventos"
+                    filterOptions={(events.data || []).map((event) => ({ label: event.name, value: event.id }))}
+                    getFilterValue={(item) => item.eventId || ""}
+                    emptyMessage="No hay solicitudes registradas."
+                    columns={[
+                      { key: "folio", title: "FOLIO", value: (item) => item.folio || item.programFolio || "—" },
+                      { key: "eventFolio", title: "FOLIO EVENTO", value: (item) => item.eventFolio || "—", width: 170 },
+                      { key: "unit", title: "UNIDAD", value: (item) => unitNames[item.unitId] || item.unitId || "—", width: 240 },
+                      { key: "date", title: "FECHA", value: (item) => item.requestedAt ? new Date(item.requestedAt).getTime() : 0, width: 140, render: (item) => <Text>{item.requestedAt ? new Date(item.requestedAt).toLocaleDateString("es-MX") : "—"}</Text> },
+                      { key: "status", title: "ESTATUS", value: (item) => item.status || "", width: 160, render: (item) => <Text className="capitalize text-primary">{(item.status || "").replaceAll("_", " ")}</Text> },
+                    ]}
+                    renderActions={(item) => <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${item.id}` as any)}><Text>Ver detalle</Text></Button>}
+                  />
+                  <View className="hidden overflow-hidden rounded-2xl border border-border bg-card">
                     <View className="flex-row bg-muted px-5 py-3">
                       <Text className="flex-1 text-xs font-bold">FOLIO</Text>
                       <Text className="w-48 text-xs font-bold">
@@ -2174,11 +2105,12 @@ function SuperAdminDashboard() {
         onRequestClose={() => setUnitModal(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
-          <View className="w-full max-w-2xl gap-5 rounded-2xl bg-background p-7">
-            <View>
+          <View className="max-h-[90vh] w-full max-w-2xl overflow-hidden rounded-2xl bg-background">
+            <View className="border-b border-border px-7 py-5">
               <Text className="text-2xl font-bold">{unitForm.id ? "Editar" : "Nueva"} unidad administrativa</Text>
               <Text className="mt-1 text-sm text-muted-foreground">Los gestores y trámites se relacionarán con esta unidad.</Text>
             </View>
+            <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 20 }}>
             <View className="grid grid-cols-[180px_1fr] gap-4">
               <Field
                 label="Clave *"
@@ -2194,7 +2126,8 @@ function SuperAdminDashboard() {
               <View><Text className="font-semibold">Unidad activa</Text><Text className="text-xs text-muted-foreground">Las unidades activas pueden recibir trámites y gestores.</Text></View>
               <Switch value={unitForm.active} onValueChange={(active) => setUnitForm({ ...unitForm, active })} />
             </View>
-            <View className="flex-row justify-end gap-3">
+            </ScrollView>
+            <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
               <Button variant="outline" onPress={() => setUnitModal(false)}><Text>Cancelar</Text></Button>
               <Button
                 disabled={saveUnit.isPending || !unitForm.code.trim() || !unitForm.name.trim()}
@@ -2214,11 +2147,13 @@ function SuperAdminDashboard() {
         onRequestClose={() => setServiceModal(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
-          <View className="max-h-[90vh] w-full max-w-3xl rounded-2xl bg-background p-7">
-            <ScrollView contentContainerStyle={{ gap: 16 }}>
+          <View className="max-h-[90vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-background">
+            <View className="border-b border-border px-7 py-5">
               <Text className="text-2xl font-bold">
                 {form.id ? "Editar" : "Nuevo"} trámite
               </Text>
+            </View>
+            <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 16 }}>
               <View className="flex-row gap-4">
                 <View className="flex-1">
                   <Field
@@ -2440,7 +2375,8 @@ function SuperAdminDashboard() {
                   </Text>
                 </View>
               )}
-              <View className="flex-row justify-end gap-3">
+            </ScrollView>
+            <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
                 <Button
                   variant="outline"
                   onPress={() => setServiceModal(false)}
@@ -2455,8 +2391,7 @@ function SuperAdminDashboard() {
                     {save.isPending ? "Guardando..." : "Guardar cambios"}
                   </Text>
                 </Button>
-              </View>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2467,9 +2402,8 @@ function SuperAdminDashboard() {
         onRequestClose={() => setEventModal(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
-          <View className="max-h-[94vh] w-full max-w-5xl rounded-2xl bg-background p-7">
-            <ScrollView contentContainerStyle={{ gap: 18 }}>
-              <View>
+          <View className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-background">
+            <View className="border-b border-border px-7 py-5">
                 <Text className="text-2xl font-bold">
                   {eventForm.id ? "Editar evento" : "Crear evento de atención"}
                 </Text>
@@ -2477,7 +2411,8 @@ function SuperAdminDashboard() {
                   Selecciona un punto en el mapa para guardar la ubicación
                   exacta.
                 </Text>
-              </View>
+            </View>
+            <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 18 }}>
               <Field
                 label="Nombre del evento"
                 value={eventForm.name}
@@ -2609,7 +2544,8 @@ function SuperAdminDashboard() {
                   }
                 />
               </View>
-              <View className="flex-row justify-end gap-3">
+            </ScrollView>
+            <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
                 <Button variant="outline" onPress={() => setEventModal(false)}>
                   <Text>Cancelar</Text>
                 </Button>
@@ -2630,8 +2566,7 @@ function SuperAdminDashboard() {
                     {saveEvent.isPending ? "Guardando..." : "Guardar evento"}
                   </Text>
                 </Button>
-              </View>
-            </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>
@@ -2642,11 +2577,13 @@ function SuperAdminDashboard() {
         onRequestClose={() => setUserModal(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
-          <View className="w-full max-w-xl rounded-2xl bg-background p-7">
-            <View className="gap-5">
+          <View className="max-h-[90vh] w-full max-w-xl overflow-hidden rounded-2xl bg-background">
+            <View className="border-b border-border px-7 py-5">
               <Text className="text-2xl font-bold">
                 {invite.id ? "Editar usuario institucional" : "Nuevo usuario institucional"}
               </Text>
+            </View>
+            <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 20 }}>
               <View className="gap-2">
                 <Text className="text-sm font-semibold">Rol</Text>
                 <View className="flex-row gap-2">
@@ -2661,8 +2598,8 @@ function SuperAdminDashboard() {
                   ))}
                 </View>
                 <Text className="text-xs text-muted-foreground">
-                  Capturista genera solicitudes; gestor y enlace atienden su unidad;
-                  Secretaría consulta el reporte general de solo lectura.
+                  Capturista genera solicitudes sin unidad asignada; gestor y enlace
+                  atienden su unidad; Secretaría consulta el reporte general de solo lectura.
                 </Text>
               </View>
               <Field
@@ -2685,7 +2622,7 @@ function SuperAdminDashboard() {
                   secureTextEntry
                 />
               ) : null}
-              {invite.role !== "secretaria" ? (
+              {invite.role === "gestor" || invite.role === "enlace" ? (
                 <UnitPicker
                   units={units.data || []}
                   value={invite.unitId}
@@ -2698,7 +2635,8 @@ function SuperAdminDashboard() {
                   <Switch value={invite.active} onValueChange={(active) => setInvite({ ...invite, active })} />
                 </View>
               ) : null}
-              <View className="flex-row justify-end gap-3">
+            </ScrollView>
+            <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
                 <Button variant="outline" onPress={() => setUserModal(false)}>
                   <Text>Cancelar</Text>
                 </Button>
@@ -2708,7 +2646,7 @@ function SuperAdminDashboard() {
                     !invite.name ||
                     !invite.email.endsWith("@tabasco.gob.mx") ||
                     (!invite.id && invite.password.length < 8) ||
-                    (invite.role !== "secretaria" && !invite.unitId)
+                    ((invite.role === "gestor" || invite.role === "enlace") && !invite.unitId)
                   }
                   onPress={() => createUser.mutate()}
                 >
@@ -2716,7 +2654,6 @@ function SuperAdminDashboard() {
                     {createUser.isPending ? "Guardando..." : invite.id ? "Guardar cambios" : "Crear usuario"}
                   </Text>
                 </Button>
-              </View>
             </View>
           </View>
         </View>

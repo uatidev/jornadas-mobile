@@ -39,6 +39,21 @@ const mapDoc = (doc: any): ServiceRequest => {
 };
 
 export const requestsService = {
+  /** Solicitudes creadas por el usuario, independientemente de la unidad responsable. */
+  async listByCapturista(userId: string): Promise<ServiceRequest[]> {
+    if (!userId) return [];
+    const result = await getAppwriteDatabases().listDocuments(
+      APPWRITE_CONFIG.DATABASE_ID,
+      APPWRITE_CONFIG.COLLECTIONS.SOLICITUDES,
+      [
+        Query.equal("solicitanteUserId", userId),
+        Query.orderDesc("fechaSolicitud"),
+        Query.limit(500),
+      ],
+    );
+    return result.documents.map(mapDoc);
+  },
+
   async getById(requestId: string): Promise<ServiceRequest> {
     const document = await getAppwriteDatabases().getDocument(
       APPWRITE_CONFIG.DATABASE_ID,

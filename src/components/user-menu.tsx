@@ -40,7 +40,7 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
   const units = useQuery({
     queryKey: ["catalog", "units"],
     queryFn: catalogService.listUnits,
-    enabled: Boolean(user?.unidadAdministrativaId),
+    enabled: user?.role !== "capturista" && Boolean(user?.unidadAdministrativaId),
   });
   const unit = units.data?.find(
     (item) => item.id === user?.unidadAdministrativaId,
@@ -72,7 +72,7 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
               {roleLabels[user.role]}
             </Text>
           ) : null}
-          {user?.unidadAdministrativaId ? (
+          {user?.unidadAdministrativaId && user.role !== "capturista" ? (
             <Text
               className="mt-0.5 text-xs text-muted-foreground"
               numberOfLines={2}

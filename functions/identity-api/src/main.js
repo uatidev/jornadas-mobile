@@ -589,17 +589,17 @@ export default async ({ req, res, log, error }) => {
         return json(400, { message: "Rol institucional no permitido" });
       if (input.id === userId)
         return json(400, { message: "No puedes modificar tu propio superadministrador desde esta vista" });
-      const isSecretary = input.role === "secretaria";
-      if (!isSecretary && !input.unitId)
+      const requiresUnit = ["enlace", "gestor"].includes(input.role);
+      if (requiresUnit && !input.unitId)
         return json(400, { message: "Debes seleccionar una unidad administrativa" });
       const targetProfile = await call("GET", `/databases/${DATABASE_ID}/collections/usuarios_perfil/documents/${input.id}`);
       const targetUser = await call("GET", `/users/${input.id}`);
       const oldUnit = targetProfile.unidadAdministrativaId
         ? await call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${targetProfile.unidadAdministrativaId}`)
         : null;
-      const newUnit = isSecretary
-        ? null
-        : await call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${input.unitId}`);
+      const newUnit = requiresUnit
+        ? await call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${input.unitId}`)
+        : null;
       if (oldUnit && oldUnit.$id !== newUnit?.$id) {
         const memberships = await call("GET", `/teams/${oldUnit.teamId}/memberships?total=false`);
         const membership = (memberships.memberships || []).find((item) => item.userId === input.id);
@@ -647,15 +647,15 @@ export default async ({ req, res, log, error }) => {
         });
       if (!["secretaria", "enlace", "gestor", "capturista"].includes(input.role))
         return json(400, { message: "Rol institucional no permitido" });
-      const isSecretary = input.role === "secretaria";
-      if (!isSecretary && !input.unitId)
+      const requiresUnit = ["enlace", "gestor"].includes(input.role);
+      if (requiresUnit && !input.unitId)
         return json(400, { message: "Debes seleccionar una unidad administrativa" });
-      const unit = isSecretary
-        ? null
-        : await call(
+      const unit = requiresUnit
+        ? await call(
             "GET",
             `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${input.unitId}`,
-          );
+          )
+        : null;
       const created = await call("POST", "/users", {
         userId: "unique()",
         email: input.email,

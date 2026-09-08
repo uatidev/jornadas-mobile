@@ -1,4 +1,6 @@
 import Constants from "expo-constants";
+import { fetch as expoFetch } from "expo/fetch";
+import { File as ExpoFile } from "expo-file-system";
 import * as ImageManipulator from "expo-image-manipulator";
 import { Dimensions, Platform } from "react-native";
 
@@ -51,15 +53,12 @@ export const scanINEImage = async (
   if (Platform.OS === "web") {
     formData.append("file", file as File);
   } else {
-    formData.append("file", {
-      uri: (file as any).uri,
-      name: (file as any).name,
-      type: (file as any).type,
-    } as any);
+    const mobileFile = file as { uri: string; name: string; type: string };
+    formData.append("file", new ExpoFile(mobileFile.uri), mobileFile.name);
   }
 
   try {
-    const response = await fetch("https://api.ocr.space/parse/image", {
+    const response = await expoFetch("https://api.ocr.space/parse/image", {
       method: "POST",
       body: formData,
     });

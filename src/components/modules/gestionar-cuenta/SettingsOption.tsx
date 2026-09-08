@@ -12,7 +12,6 @@ interface SettingsOptionProps {
 
 export function SettingsOption({ option, isLast }: SettingsOptionProps) {
   const { colorScheme } = useTheme();
-  const borderColor = THEME[colorScheme].border;
   const cardForegroundColor = THEME[colorScheme].cardForeground;
   const mutedForegroundColor = THEME[colorScheme].mutedForeground;
   const destructiveColor = THEME[colorScheme].destructive;
@@ -20,25 +19,24 @@ export function SettingsOption({ option, isLast }: SettingsOptionProps) {
   const isDestructive = option.variant === "destructive";
 
   return (
-    <Pressable onPress={option.onPress} className="active:opacity-70">
-      <View
-        className="flex-row items-center justify-between px-4 py-4"
-        style={{
-          borderBottomWidth: isLast ? 0 : 1,
-          borderBottomColor: borderColor,
-        }}
-      >
-        <View className="flex-row items-center flex-1 gap-3">
-          <Monicon
-            name={option.iconName}
-            size={22}
-            color={
-              isDestructive ? destructiveColor : THEME[colorScheme].foreground
-            }
-          />
+    <Pressable
+      onPress={option.onPress}
+      className={`active:opacity-70 ${isLast ? "" : "border-b border-border"}`}
+    >
+      <View className="flex-row items-center justify-between px-4 py-4">
+        <View className="flex-row items-center flex-1 gap-4">
+          <View
+            className={`h-10 w-10 items-center justify-center rounded-full ${isDestructive ? "bg-destructive/10" : "bg-primary/10"}`}
+          >
+            <Monicon
+              name={option.iconName}
+              size={22}
+              color={isDestructive ? destructiveColor : "#981646"}
+            />
+          </View>
           <View className="flex-1">
             <Text
-              className="text-base font-medium"
+              className="font-semibold"
               style={{
                 color: isDestructive ? destructiveColor : cardForegroundColor,
               }}
@@ -47,7 +45,7 @@ export function SettingsOption({ option, isLast }: SettingsOptionProps) {
             </Text>
             {option.description && (
               <Text
-                className="text-sm mt-0.5"
+                className="mt-1 text-xs"
                 style={{
                   color: isDestructive
                     ? `${destructiveColor}CC`

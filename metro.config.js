@@ -6,6 +6,10 @@ const path = require("path");
 const config = getDefaultConfig(__dirname);
 const projectEntryPoint = path.join(__dirname, "package.json");
 
+// Windows puede agotar los manejadores de archivos durante reconstrucciones
+// grandes. Reducir la concurrencia mantiene estable la caché de Metro.
+config.maxWorkers = 2;
+
 // Appwrite depends on an older expo-file-system release, whose peer dependency
 // can make Bun install a second React Native. Native modules must always resolve
 // against the React Native version bundled by this Expo SDK.
@@ -34,6 +38,7 @@ const configWithMonicon = withMonicon(config, {
     "ic",
     "openmoji",
     "material-symbols",
+    "ci",
   ],
 });
 

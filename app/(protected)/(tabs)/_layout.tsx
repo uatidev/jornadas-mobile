@@ -64,6 +64,19 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="configuracion/index"
+        options={{
+          title: "Configuración",
+          tabBarIcon: ({ color, size }) => (
+            <Monicon
+              name="material-symbols:settings-outline-rounded"
+              size={size || 24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="desarrollo-comercial/index"
         options={{
           title: "Desarrollo Comercial",
