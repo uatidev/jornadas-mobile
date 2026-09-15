@@ -137,6 +137,31 @@ export function FormFieldBuilder({
               />
             </View>
           </View>
+          {field.type === "file" ? (
+            <View className="gap-2 mt-4">
+              <Text className="text-sm font-semibold">Tipos de archivo permitidos</Text>
+              <select
+                value={field.fileType || "any"}
+                onChange={(event) =>
+                  update(index, {
+                    fileType: event.currentTarget.value as ServiceFormField["fileType"],
+                  })
+                }
+                style={{
+                  minHeight: 40,
+                  border: "1px solid #d4d4d8",
+                  borderRadius: 8,
+                  padding: "8px 12px",
+                  background: "transparent",
+                  color: "inherit",
+                }}
+              >
+                <option value="any">Documentos e imágenes</option>
+                <option value="document">Solo documentos (PDF, Word, Excel)</option>
+                <option value="image">Solo imágenes (JPG, PNG)</option>
+              </select>
+            </View>
+          ) : null}
           {field.type === "select" || field.type === "multiselect" ? (
             <View className="gap-3">
               <Text className="text-sm font-semibold">

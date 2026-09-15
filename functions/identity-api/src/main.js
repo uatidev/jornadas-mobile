@@ -252,7 +252,7 @@ export default async ({ req, res, log, error }) => {
     if (input.action === "submitRequest") {
       if (
         !isSuperAdmin &&
-        !["capturista", "gestor", "enlace", "secretaria"].includes(
+        !["capturista", "capturista_secretaria", "gestor", "enlace", "secretaria"].includes(
           profile.rolSistema,
         )
       )
@@ -264,7 +264,15 @@ export default async ({ req, res, log, error }) => {
         `/databases/${DATABASE_ID}/collections/tramites_servicios/documents/${input.serviceId}`,
       );
       const now = Date.now();
+      const canChoosePriority = ["secretaria", "capturista_secretaria", "enlace"].includes(
+        profile.rolSistema,
+      );
+      const institutionalPriority = ["secretaria", "capturista_secretaria"].includes(
+        profile.rolSistema,
+      );
       const priorityOnReopening =
+        institutionalPriority ||
+        (canChoosePriority && input.priority === true) ||
         !service.activo ||
         (service.vigenciaInicio && now < new Date(service.vigenciaInicio).getTime()) ||
         (service.vigenciaFin && now > new Date(service.vigenciaFin).getTime());
@@ -317,6 +325,7 @@ export default async ({ req, res, log, error }) => {
         `read(\"label:superadmin\")`,
         `update(\"label:superadmin\")`,
         `read(\"label:secretaria\")`,
+        `read(\"label:capturistasecretaria\")`,
         `read(\"label:enlace\")`,
         `update(\"label:enlace\")`,
       ];
@@ -340,7 +349,7 @@ export default async ({ req, res, log, error }) => {
             ...(programFolio ? { folioPrograma: programFolio } : {}),
             prioridadReapertura: Boolean(priorityOnReopening),
             ...(priorityOnReopening
-              ? { observaciones: "Registro prioritario para la proxima apertura" }
+              ? { observaciones: "Solicitud registrada con prioridad" }
               : {}),
           },
         },
@@ -465,6 +474,7 @@ export default async ({ req, res, log, error }) => {
                 requiereReasignacion: true,
                 motivoReasignacion: String(input.reason).trim(),
                 unidadAnteriorId: request.unidadAdministrativaId,
+                reasignacionSolicitadaEn: new Date().toISOString(),
               },
             }),
             observaciones: String(input.reason).trim(),
@@ -524,6 +534,33 @@ export default async ({ req, res, log, error }) => {
       });
     }
 
+    if (input.action === "canalizationReport") {
+      if (!isSuperAdmin && profile.rolSistema !== "enlace")
+        return json(403, { message: "Acceso exclusivo de enlaces de canalización" });
+      const result = await call(
+        "GET",
+        `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`,
+      );
+      const items = (result.documents || []).flatMap((item) => {
+        let tracking = {};
+        try { tracking = JSON.parse(item.datosTramite || "{}").__seguimiento || {}; } catch {}
+        if (!tracking.unidadAnteriorId && !tracking.requiereReasignacion) return [];
+        return [{
+          id: item.$id,
+          folio: item.folio,
+          serviceId: item.tramiteServicioId,
+          previousUnitId: tracking.unidadAnteriorId,
+          destinationUnitId: tracking.requiereReasignacion ? null : item.unidadAdministrativaId,
+          reason: tracking.motivoReasignacion || item.observaciones,
+          requestedAt: tracking.reasignacionSolicitadaEn || item.fechaSolicitud,
+          resolvedAt: tracking.reasignadoEn || null,
+          resolvedByUserId: tracking.reasignadoPorUserId || null,
+          pending: Boolean(tracking.requiereReasignacion),
+        }];
+      });
+      return json(200, { items });
+    }
+
     if (input.action === "reassignRequest") {
       if (!isSuperAdmin && profile.rolSistema !== "enlace")
         return json(403, { message: "Acceso exclusivo de enlaces" });
@@ -554,6 +591,9 @@ export default async ({ req, res, log, error }) => {
                 ...(() => { try { return JSON.parse(request.datosTramite || "{}").__seguimiento || {}; } catch { return {}; } })(),
                 requiereReasignacion: false,
                 reasignadoPorUserId: userId,
+                reasignadoEn: new Date().toISOString(),
+                unidadDestinoId: unit.$id,
+                notaCanalizacion: input.comment || `Reasignada a ${unit.nombre}`,
               },
             }),
             observaciones: input.comment || `Reasignada a ${unit.nombre}`,
@@ -585,11 +625,14 @@ export default async ({ req, res, log, error }) => {
         return json(403, { message: "Acceso exclusivo de superadministración" });
       if (!String(input.email || "").toLowerCase().endsWith("@tabasco.gob.mx"))
         return json(400, { message: "El usuario debe usar un correo @tabasco.gob.mx" });
-      if (!["secretaria", "enlace", "gestor", "capturista"].includes(input.role))
+      if (!["super_admin", "secretaria", "capturista_secretaria", "enlace", "gestor", "capturista"].includes(input.role))
         return json(400, { message: "Rol institucional no permitido" });
       if (input.id === userId)
         return json(400, { message: "No puedes modificar tu propio superadministrador desde esta vista" });
-      const requiresUnit = ["enlace", "gestor"].includes(input.role);
+      const nextPassword = String(input.password || "");
+      if (nextPassword && (nextPassword.length < 8 || nextPassword.length > 256))
+        return json(400, { message: "La nueva contraseña debe tener entre 8 y 256 caracteres" });
+      const requiresUnit = ["gestor", "capturista"].includes(input.role);
       if (requiresUnit && !input.unitId)
         return json(400, { message: "Debes seleccionar una unidad administrativa" });
       const targetProfile = await call("GET", `/databases/${DATABASE_ID}/collections/usuarios_perfil/documents/${input.id}`);
@@ -600,12 +643,12 @@ export default async ({ req, res, log, error }) => {
       const newUnit = requiresUnit
         ? await call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${input.unitId}`)
         : null;
-      if (oldUnit && oldUnit.$id !== newUnit?.$id) {
+      if (oldUnit && (input.role !== "gestor" || oldUnit.$id !== newUnit?.$id)) {
         const memberships = await call("GET", `/teams/${oldUnit.teamId}/memberships?total=false`);
         const membership = (memberships.memberships || []).find((item) => item.userId === input.id);
         if (membership) await call("DELETE", `/teams/${oldUnit.teamId}/memberships/${membership.$id}`);
       }
-      if (newUnit && oldUnit?.$id !== newUnit.$id) {
+      if (input.role === "gestor" && newUnit) {
         const newMemberships = await call("GET", `/teams/${newUnit.teamId}/memberships?total=false`);
         const alreadyMember = (newMemberships.memberships || []).some((item) => item.userId === input.id);
         if (!alreadyMember)
@@ -617,13 +660,17 @@ export default async ({ req, res, log, error }) => {
         await call("PATCH", `/users/${input.id}/name`, { name: nextName });
       if (nextEmail !== String(targetUser.email || "").trim().toLowerCase())
         await call("PATCH", `/users/${input.id}/email`, { email: nextEmail });
+      if (nextPassword)
+        await call("PATCH", `/users/${input.id}/password`, { password: nextPassword });
       await call("PATCH", `/users/${input.id}/status`, { status: input.active !== false });
-      await call("PUT", `/users/${input.id}/labels`, { labels: [input.role] });
+      await call("PUT", `/users/${input.id}/labels`, {
+        labels: [input.role === "super_admin" ? "superadmin" : input.role === "capturista_secretaria" ? "capturistasecretaria" : input.role],
+      });
       const updated = await call("PATCH", `/databases/${DATABASE_ID}/collections/usuarios_perfil/documents/${input.id}`, {
         data: {
           email: nextEmail,
           nombre: nextName,
-          rol: ["secretaria", "capturista", "gestor"].includes(input.role) ? "enlace" : input.role,
+          rol: ["secretaria", "capturista_secretaria", "capturista", "gestor"].includes(input.role) ? "enlace" : input.role,
           rolSistema: input.role,
           unidadAdministrativaId: newUnit?.$id || null,
           activo: input.active !== false,
@@ -645,9 +692,9 @@ export default async ({ req, res, log, error }) => {
         return json(400, {
           message: "El usuario debe usar un correo @tabasco.gob.mx",
         });
-      if (!["secretaria", "enlace", "gestor", "capturista"].includes(input.role))
+      if (!["super_admin", "secretaria", "capturista_secretaria", "enlace", "gestor", "capturista"].includes(input.role))
         return json(400, { message: "Rol institucional no permitido" });
-      const requiresUnit = ["enlace", "gestor"].includes(input.role);
+      const requiresUnit = ["gestor", "capturista"].includes(input.role);
       if (requiresUnit && !input.unitId)
         return json(400, { message: "Debes seleccionar una unidad administrativa" });
       const unit = requiresUnit
@@ -663,9 +710,9 @@ export default async ({ req, res, log, error }) => {
         name: input.name,
       });
       await call("PUT", `/users/${created.$id}/labels`, {
-        labels: [input.role],
+        labels: [input.role === "super_admin" ? "superadmin" : input.role === "capturista_secretaria" ? "capturistasecretaria" : input.role],
       });
-      if (unit)
+      if (unit && input.role === "gestor")
         await call("POST", `/teams/${unit.teamId}/memberships`, {
           roles: ["member"],
           userId: created.$id,
@@ -684,7 +731,7 @@ export default async ({ req, res, log, error }) => {
             userId: created.$id,
             email: created.email,
             nombre: created.name,
-            rol: ["secretaria", "capturista", "gestor"].includes(input.role)
+            rol: ["secretaria", "capturista_secretaria", "capturista", "gestor"].includes(input.role)
               ? "enlace"
               : input.role,
             rolSistema: input.role,

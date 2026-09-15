@@ -47,6 +47,7 @@ export interface ServiceFormField {
     | "boolean"
     | "file"
     | "textarea";
+  fileType?: "document" | "image" | "any";
   placeholder?: string;
   required?: boolean;
   options?: string[];

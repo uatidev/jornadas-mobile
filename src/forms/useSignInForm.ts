@@ -4,7 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import type { TextInput } from "react-native";
+import { Platform, type TextInput } from "react-native";
 import { SignInFormData, signInValidationSchema } from "./schemas/SignInForm";
 
 export const useSignInForm = () => {
@@ -32,10 +32,14 @@ export const useSignInForm = () => {
       return login(data.email, data.password);
     },
     onSuccess: (user) => {
+      const opensAdministrativePanel =
+        Platform.OS === "web" &&
+        (user.role === "super_admin" ||
+          user.role === "gestor" ||
+          user.role === "enlace" ||
+          user.role === "secretaria");
       router.replace(
-        user.role === "super_admin" ||
-        user.role === "gestor" ||
-        user.role === "secretaria"
+        opensAdministrativePanel
           ? ("/(protected)/admin" as any)
           : ("/(protected)/(tabs)/home" as any),
       );

@@ -24,3 +24,13 @@ export interface ServiceRequest {
   applicantData?: Record<string, unknown>;
   requestData?: Record<string, unknown>;
 }
+
+export interface RequestHistoryEntry {
+  id: string;
+  requestId: string;
+  previousStatus?: string;
+  newStatus: string;
+  comment?: string;
+  performedByUserId: string;
+  date: string;
+}

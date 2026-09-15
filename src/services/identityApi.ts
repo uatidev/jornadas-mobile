@@ -39,6 +39,19 @@ export interface ReportingStaffMember {
   unitId?: string;
 }
 
+export interface CanalizationReportItem {
+  id: string;
+  folio: string;
+  serviceId: string;
+  previousUnitId?: string;
+  destinationUnitId?: string;
+  reason?: string;
+  requestedAt: string;
+  resolvedAt?: string;
+  resolvedByUserId?: string;
+  pending: boolean;
+}
+
 export const identityApi = {
   ensureProfile: () => execute({ action: "ensureProfile" }),
   submitRequest: (
@@ -47,6 +60,7 @@ export const identityApi = {
     requestData: unknown,
     eventId?: string,
     recipientEmail?: string,
+    priority?: boolean,
   ) =>
     execute<SubmittedRequest>({
       action: "submitRequest",
@@ -55,21 +69,23 @@ export const identityApi = {
       requestData,
       eventId,
       recipientEmail,
+      priority,
     }),
   createStaffUser: (data: {
     email: string;
     password: string;
     name: string;
     unitId?: string;
-    role: "secretaria" | "enlace" | "gestor" | "capturista";
+    role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista";
   }) => execute({ action: "createStaffUser", ...data }),
   updateStaffUser: (data: {
     id: string;
     email: string;
     name: string;
     unitId?: string;
-    role: "secretaria" | "enlace" | "gestor" | "capturista";
+    role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista";
     active: boolean;
+    password?: string;
   }) => execute({ action: "updateStaffUser", ...data }),
   updateStatus: (requestId: string, status: string, comment?: string, outcome?: {
     finalResult?: string;
@@ -84,6 +100,8 @@ export const identityApi = {
     execute({ action: "requestReassignment", requestId, reason }),
   listReassignmentQueue: () =>
     execute<{ requests: ServiceRequest[] }>({ action: "listReassignmentQueue" }),
+  getCanalizationReport: () =>
+    execute<{ items: CanalizationReportItem[] }>({ action: "canalizationReport" }),
   reassignRequest: (requestId: string, unitId: string, comment?: string) =>
     execute({ action: "reassignRequest", requestId, unitId, comment }),
   saveAdministrativeUnit: (data: {

@@ -6,6 +6,8 @@
     "appwrite:provision": "node scripts/appwrite/provision.mjs",
     "appwrite:bootstrap-admin": "node scripts/appwrite/bootstrap-admin.mjs",
     "appwrite:reset-data": "node scripts/appwrite/reset-data.mjs",
+    "appwrite:reset-requests": "node scripts/appwrite/reset-requests.mjs",
+    "appwrite:reset-users": "node scripts/appwrite/reset-users.mjs",
     "appwrite:deploy-function": "node scripts/appwrite/deploy-function.mjs",
     "appwrite:deploy-site": "node scripts/appwrite/deploy-site.mjs",
     "appwrite:grant-secretary": "node scripts/appwrite/grant-secretary-access.mjs",

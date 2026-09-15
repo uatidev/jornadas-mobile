@@ -12,13 +12,16 @@ import {
 import { Button } from "@/src/components/ui/button";
 import { Text } from "@/src/components/ui/text";
 import { useCatalogService, useGlobalForm } from "@/src/hooks/useCatalog";
+import { useAuth } from "@/src/providers/AuthProvider";
 import { identityApi } from "@/src/services/identityApi";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   ScrollView,
   View,
 } from "react-native";
@@ -29,6 +32,8 @@ const asText = (value: string | string[] | undefined, fallback: string) =>
 
 export default function NewRequest() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{
     serviceId?: string;
@@ -55,10 +60,15 @@ export default function NewRequest() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [folio, setFolio] = useState<string>();
+  const [eventFolio, setEventFolio] = useState<string>();
   const [priorityOnReopening, setPriorityOnReopening] = useState(false);
+  const [priorityRequested, setPriorityRequested] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string>();
 
   const globalFields = globalForm?.fields || [];
+  const forcedInstitutionalPriority = user?.role === "secretaria" || user?.role === "capturista_secretaria";
+  const canSetPriority = forcedInstitutionalPriority || user?.role === "enlace";
+  const selectedPriority = forcedInstitutionalPriority || priorityRequested;
   const usesGlobalForm = service?.usesGlobalForm ?? true;
   const specificFields = service?.formConfig?.fields || [];
   const globalComplete = isDynamicFormComplete(globalFields, globalData);
@@ -126,10 +136,18 @@ export default function NewRequest() {
           );
           return field ? globalData[field.key]?.trim() : undefined;
         })(),
+        selectedPriority,
       );
       setFolio(result.programFolio || result.eventFolio || result.folio);
+      setEventFolio(result.eventFolio);
       setPriorityOnReopening(Boolean(result.priorityOnReopening));
       setEmailMessage(result.emailMessage);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["secretaria", "requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["gestor", "requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["admin", "requests"] }),
+        queryClient.invalidateQueries({ queryKey: ["my-captured-requests", user?.id] }),
+      ]);
       setStage("success");
     } catch (cause) {
       setError(
@@ -146,7 +164,9 @@ export default function NewRequest() {
     setSpecificData({});
     setError(null);
     setFolio(undefined);
+    setEventFolio(undefined);
     setPriorityOnReopening(false);
+    setPriorityRequested(false);
     setEmailMessage(undefined);
     setStage("intro");
   };
@@ -183,6 +203,7 @@ export default function NewRequest() {
               <RequestSuccess
                 title={title}
                 folio={folio}
+                eventFolio={eventFolio}
                 priorityOnReopening={priorityOnReopening}
                 emailMessage={emailMessage}
                 onClose={() => router.replace("/home" as any)}
@@ -241,6 +262,25 @@ export default function NewRequest() {
                     • {value}
                   </Text>
                 ))}
+                {canSetPriority ? (
+                  <Pressable
+                    disabled={forcedInstitutionalPriority}
+                    onPress={() => setPriorityRequested((value) => !value)}
+                    className={`mt-3 flex-row items-center gap-3 rounded-xl border p-4 ${selectedPriority ? "border-primary bg-primary/10" : "border-border"}`}
+                  >
+                    <View className={`h-5 w-5 items-center justify-center rounded border ${selectedPriority ? "border-primary bg-primary" : "border-muted-foreground"}`}>
+                      {selectedPriority ? <Text className="text-xs font-bold text-primary-foreground">✓</Text> : null}
+                    </View>
+                    <View className="flex-1">
+                      <Text className="font-semibold">Solicitud prioritaria</Text>
+                      <Text className="mt-1 text-xs text-muted-foreground">
+                        {forcedInstitutionalPriority
+                          ? "Las solicitudes registradas por Secretaría se envían automáticamente como prioritarias."
+                          : "Márcala cuando requiera atención prioritaria por parte de la unidad responsable."}
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : null}
                 {error ? (
                   <Text className="text-destructive">{error}</Text>
                 ) : null}

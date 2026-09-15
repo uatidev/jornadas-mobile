@@ -5,6 +5,7 @@ import { TABASCO_MUNICIPALITIES } from "@/src/constants/tabasco";
 import { Pressable, View } from "react-native";
 import { useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
+import * as ImagePicker from "expo-image-picker";
 import { filesService } from "@/src/services/files";
 import { Button } from "@/src/components/ui/button";
 
@@ -43,27 +44,59 @@ export function DynamicGlobalForm({
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const setValue = (key: string, value: string) =>
     onChange({ ...values, [key]: value });
-  const pickFile = async (field: ServiceFormField) => {
-    setUploadErrors((current) => ({ ...current, [field.key]: "" }));
-    const result = await DocumentPicker.getDocumentAsync({
-      type: ["application/pdf", "image/*", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
-      copyToCacheDirectory: true,
-      multiple: false,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
+  const uploadPickedFile = async (
+    field: ServiceFormField,
+    file: File | { uri: string; name: string; type: string },
+  ) => {
     setUploadingKey(field.key);
     try {
-      const uploaded = await filesService.uploadImage(
-        asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" },
-        "request_documents",
-      );
+      const uploaded = await filesService.uploadImage(file, "request_documents");
       setValue(field.key, JSON.stringify({ fileId: uploaded.filename, name: uploaded.originalname, type: uploaded.mimetype, size: uploaded.size, url: uploaded.url }));
     } catch (cause) {
       setUploadErrors((current) => ({ ...current, [field.key]: cause instanceof Error ? cause.message : "No fue posible subir el archivo" }));
     } finally {
       setUploadingKey(null);
     }
+  };
+  const pickDocument = async (field: ServiceFormField) => {
+    setUploadErrors((current) => ({ ...current, [field.key]: "" }));
+    const fileTypes = ["application/pdf", "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"];
+
+    const result = await DocumentPicker.getDocumentAsync({
+      type: fileTypes,
+      copyToCacheDirectory: true,
+      multiple: false,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    await uploadPickedFile(
+      field,
+      asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" },
+    );
+  };
+  const pickImage = async (field: ServiceFormField) => {
+    setUploadErrors((current) => ({ ...current, [field.key]: "" }));
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      setUploadErrors((current) => ({ ...current, [field.key]: "Permite el acceso a Fotos para seleccionar una imagen." }));
+      return;
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: false,
+      quality: 0.9,
+      allowsMultipleSelection: false,
+    });
+    if (result.canceled || !result.assets[0]) return;
+    const asset = result.assets[0];
+    await uploadPickedFile(
+      field,
+      asset.file || {
+        uri: asset.uri,
+        name: asset.fileName || `imagen-${Date.now()}.jpg`,
+        type: asset.mimeType || "image/jpeg",
+      },
+    );
   };
 
   return (
@@ -95,9 +128,18 @@ export function DynamicGlobalForm({
 
             {field.type === "file" ? (
               <View className="gap-2 rounded-xl border border-dashed border-border p-4">
-                <Button variant="outline" disabled={uploadingKey === field.key} onPress={() => pickFile(field)}>
-                  <Text>{uploadingKey === field.key ? "Subiendo archivo..." : value ? "Cambiar archivo" : "Seleccionar archivo"}</Text>
-                </Button>
+                <View className="flex-row flex-wrap gap-2">
+                  {field.fileType !== "document" ? (
+                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key} onPress={() => pickImage(field)}>
+                      <Text>{uploadingKey === field.key ? "Subiendo..." : value ? "Cambiar por una imagen" : "Elegir de Fotos"}</Text>
+                    </Button>
+                  ) : null}
+                  {field.fileType !== "image" ? (
+                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key} onPress={() => pickDocument(field)}>
+                      <Text>{uploadingKey === field.key ? "Subiendo..." : value ? "Cambiar por un documento" : "Elegir documento"}</Text>
+                    </Button>
+                  ) : null}
+                </View>
                 {value ? (
                   <View className="flex-row items-center justify-between gap-3">
                     <Text className="flex-1 text-sm text-primary" numberOfLines={1}>
@@ -107,7 +149,9 @@ export function DynamicGlobalForm({
                   </View>
                 ) : null}
                 {uploadErrors[field.key] ? <Text className="text-sm text-destructive">{uploadErrors[field.key]}</Text> : null}
-                <Text className="text-xs text-muted-foreground">PDF, imagen, Word o Excel. Máximo 15 MB.</Text>
+                <Text className="text-xs text-muted-foreground">
+                  {field.fileType === "document" ? "PDF, Word o Excel. Máximo 15 MB." : field.fileType === "image" ? "Imágenes (JPG, PNG). Máximo 15 MB." : "PDF, imagen, Word o Excel. Máximo 15 MB."}
+                </Text>
               </View>
             ) : isChoice ? (
               <View className="flex-row flex-wrap gap-2">

@@ -307,6 +307,7 @@ export function isSpecificFormComplete(
 export function RequestSuccess({
   title,
   folio,
+  eventFolio,
   priorityOnReopening,
   emailMessage,
   onClose,
@@ -314,6 +315,7 @@ export function RequestSuccess({
 }: {
   title: string;
   folio?: string;
+  eventFolio?: string;
   priorityOnReopening?: boolean;
   emailMessage?: string;
   onClose: () => void;
@@ -329,17 +331,26 @@ export function RequestSuccess({
         Tu solicitud de “{title}” se registró correctamente.
       </Text>
       {folio ? (
-        <Text className="text-center text-sm font-semibold text-primary">
-          Folio: {folio}
-        </Text>
+        <View className="w-full gap-2 rounded-xl bg-muted/60 p-4">
+          <View className="flex-row items-center justify-between gap-4">
+            <Text className="text-sm text-muted-foreground">Folio de solicitud</Text>
+            <Text className="font-semibold text-primary">{folio}</Text>
+          </View>
+          {eventFolio ? (
+            <View className="flex-row items-center justify-between gap-4 border-t border-border pt-2">
+              <Text className="text-sm text-muted-foreground">Folio del evento</Text>
+              <Text className="font-semibold">{eventFolio}</Text>
+            </View>
+          ) : null}
+        </View>
       ) : null}
       {priorityOnReopening ? (
         <View className="rounded-xl border border-amber-300 bg-amber-50 p-4">
           <Text className="text-center font-semibold text-amber-900">
-            Registro prioritario para la próxima apertura
+            Solicitud registrada como prioritaria
           </Text>
           <Text className="mt-1 text-center text-sm text-amber-800">
-            La unidad responsable podrá identificarlo cuando el programa vuelva a abrir.
+            La unidad responsable podrá identificarla y atenderla con prioridad.
           </Text>
         </View>
       ) : null}

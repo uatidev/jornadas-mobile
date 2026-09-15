@@ -100,7 +100,7 @@ export interface AdminUserProfile {
   id: string;
   email: string;
   name: string;
-  role: "super_admin" | "secretaria" | "enlace" | "gestor" | "capturista" | "solicitante";
+  role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista" | "solicitante";
   unitId?: string;
   active: boolean;
 }
@@ -387,7 +387,7 @@ export const adminService = {
     password: string;
     name: string;
     unitId?: string;
-    role: "secretaria" | "enlace" | "gestor" | "capturista";
+    role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista";
   }) {
     return identityApi.createStaffUser(input);
   },

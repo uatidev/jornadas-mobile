@@ -1,5 +1,7 @@
 import { Platform } from "react-native";
 import Constants from "expo-constants";
+import { File as ExpoFile } from "expo-file-system";
+import { Permission, Role } from "react-native-appwrite";
 import {
   APPWRITE_CONFIG,
   getAppwriteStorage,
@@ -49,7 +51,7 @@ class FilesService {
       const fileId = ID.unique();
 
       // Preparar el archivo exactamente como en promocion-turistica
-      let fileData: File | { uri: string; name: string; type: string };
+      let fileData: File | ExpoFile;
 
       if (Platform.OS === "web") {
         if (file instanceof File) {
@@ -67,33 +69,13 @@ class FilesService {
           fileData = new File([blob], fileName, { type });
         }
       } else {
-        // En móvil, react-native-appwrite requiere un objeto con uri, name, mimeType y fileSize
+        // Expo SDK 57 usa un FormData que requiere Blob/bytes. ExpoFile implementa
+        // ambos y evita "Unsupported FormDataPart implementation" en iOS.
         const fileObj = file as { uri: string; name: string; type: string };
         if (!fileObj.uri) {
           throw new Error("La imagen no contiene URI válida");
         }
-        const fallbackType = "image/jpeg";
-        const fileName = fileObj.name || `${fileId}.jpg`;
-        const mimeType = fileObj.type || fallbackType;
-
-        // Intentar obtener el tamaño del archivo
-        let fileSize = 0;
-        try {
-          const response = await fetch(fileObj.uri);
-          const blob = await response.blob();
-          fileSize = blob.size;
-        } catch {
-          // Usar 0 si no se puede obtener el tamaño
-        }
-
-        // Formato requerido por react-native-appwrite 0.12.0 en iOS/Android
-        // Intentar con 'type' y 'size' en lugar de 'mimeType' y 'fileSize'
-        fileData = {
-          uri: fileObj.uri,
-          name: fileName,
-          type: mimeType, // Usar 'type' para compatibilidad con versiones antiguas
-          size: fileSize, // Usar 'size' para compatibilidad con versiones antiguas
-        } as any;
+        fileData = new ExpoFile(fileObj.uri);
       }
 
       // Subir archivo a Appwrite Storage
@@ -109,10 +91,21 @@ class FilesService {
             : fileData;
 
         try {
+          const permissions = bucketType === "request_documents"
+            ? [
+                Permission.read(Role.label("superadmin")),
+                Permission.read(Role.label("secretaria")),
+                Permission.read(Role.label("capturistasecretaria")),
+                Permission.read(Role.label("gestor")),
+                Permission.read(Role.label("enlace")),
+                Permission.read(Role.label("capturista")),
+              ]
+            : undefined;
           response = await storage.createFile(
             bucketId,
             fileId,
             fileToUpload as any,
+            permissions,
           );
         } catch (createFileError: any) {
           throw createFileError;
@@ -135,7 +128,7 @@ Posibles causas:
 Bucket ID: ${bucketId}
 File ID: ${fileId}
 Plataforma: ${Platform.OS}
-Formato archivo: ${fileData instanceof File ? "File" : "Object con URI"}`;
+Formato archivo: ${Platform.OS === "web" ? "File web" : "ExpoFile nativo"}`;
 
         throw new Error(errorMessage);
       }
@@ -156,7 +149,7 @@ Formato archivo: ${fileData instanceof File ? "File" : "Object con URI"}`;
       const fileUrl = `${endpoint}/storage/buckets/${bucketId}/files/${response.$id}/view?project=${projectId}`;
 
       const fileName =
-        file instanceof File
+        Platform.OS === "web" && file instanceof File
           ? file.name
           : (file as { uri: string; name: string; type: string }).name ||
             `${fileId}.jpg`;
@@ -166,9 +159,9 @@ Formato archivo: ${fileData instanceof File ? "File" : "Object con URI"}`;
         originalname: fileName,
         mimetype:
           response.mimeType ||
-          (fileData instanceof File
+          (Platform.OS === "web" && fileData instanceof File
             ? fileData.type
-            : (fileData as { uri: string; name: string; type: string }).type) ||
+            : (file as { uri: string; name: string; type: string }).type) ||
           "image/jpeg",
         size: response.sizeOriginal || 0,
         url: fileUrl,
@@ -190,6 +183,30 @@ Formato archivo: ${fileData instanceof File ? "File" : "Object con URI"}`;
       return await Promise.all(uploadPromises);
     } catch (error) {
       throw error;
+    }
+  }
+
+  async openAuthenticatedFile(
+    fileId: string,
+    mimeType = "application/octet-stream",
+  ): Promise<void> {
+    if (Platform.OS !== "web")
+      throw new Error("La visualización administrativa de adjuntos está disponible en la versión web");
+    const opened = window.open("about:blank", "_blank");
+    if (!opened)
+      throw new Error("El navegador bloqueó la ventana. Permite ventanas emergentes para visualizar el archivo");
+    opened.opener = null;
+    try {
+      const bytes = await getAppwriteStorage().getFileView({
+        bucketId: APPWRITE_CONFIG.STORAGE_BUCKETS.REQUEST_DOCUMENTS,
+        fileId,
+      });
+      const objectUrl = URL.createObjectURL(new Blob([bytes], { type: mimeType }));
+      opened.location.href = objectUrl;
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (cause) {
+      opened.close();
+      throw cause;
     }
   }
 

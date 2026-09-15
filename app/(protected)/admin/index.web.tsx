@@ -1,5 +1,17 @@
 "use client";
 
+import { AdminDataTable } from "@/src/components/modules/admin/AdminDataTable.web";
+import {
+  RequestsBarChart,
+  StatusPieChart,
+  type DashboardChartDatum,
+} from "@/src/components/modules/admin/DashboardCharts.web";
+import {
+  FormFieldBuilder,
+  isFormBuilderValid,
+} from "@/src/components/modules/admin/FormFieldBuilder.web";
+import { RequirementBuilder } from "@/src/components/modules/admin/RequirementBuilder.web";
+import { TargetAudienceBuilder } from "@/src/components/modules/admin/TargetAudienceBuilder.web";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
@@ -7,24 +19,12 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import {
   adminService,
   AttentionEventInput,
-  type ServiceRequirementInput,
   ServiceInput,
+  type ServiceRequirementInput,
 } from "@/src/services/admin";
-import { requestsService } from "@/src/services/requests";
-import { identityApi } from "@/src/services/identityApi";
 import { filesService } from "@/src/services/files";
-import {
-  FormFieldBuilder,
-  isFormBuilderValid,
-} from "@/src/components/modules/admin/FormFieldBuilder.web";
-import { RequirementBuilder } from "@/src/components/modules/admin/RequirementBuilder.web";
-import { TargetAudienceBuilder } from "@/src/components/modules/admin/TargetAudienceBuilder.web";
-import {
-  RequestsBarChart,
-  StatusPieChart,
-  type DashboardChartDatum,
-} from "@/src/components/modules/admin/DashboardCharts.web";
-import { AdminDataTable } from "@/src/components/modules/admin/AdminDataTable.web";
+import { identityApi } from "@/src/services/identityApi";
+import { requestsService } from "@/src/services/requests";
 import type {
   AdministrativeUnit,
   AttentionEvent,
@@ -32,8 +32,9 @@ import type {
   ServiceFormField,
   ServiceType,
 } from "@/src/types/catalog";
-import React, { Suspense } from "react";
 import Monicon from "@monicon/native";
+import React, { Suspense } from "react";
+import { createPortal } from "react-dom";
 
 // Importación dinámica para evitar que Leaflet se ejecute en el servidor (SSR)
 const LocationPicker = React.lazy(() =>
@@ -44,6 +45,11 @@ const LocationPicker = React.lazy(() =>
 const SecretaryEventsMap = React.lazy(() =>
   import("@/src/components/modules/admin/SecretaryEventsMap.web").then((m) => ({
     default: m.SecretaryEventsMap,
+  })),
+);
+const MunicipalEventsMap = React.lazy(() =>
+  import("@/src/components/modules/admin/MunicipalEventsMap.web").then((m) => ({
+    default: m.MunicipalEventsMap,
   })),
 );
 
@@ -73,7 +79,7 @@ type Section =
   | "tramites"
   | "usuarios"
   | "solicitudes";
-type SecretarySection = "resumen" | "eventos" | "solicitudes";
+type SecretarySection = "resumen" | "eventos" | "reporte" | "solicitudes";
 const EMPTY: ServiceInput = {
   unitId: "",
   code: "",
@@ -112,16 +118,44 @@ const nav: { key: Section; label: string; icon: string }[] = [
   { key: "resumen", label: "Resumen", icon: "ci:chart-pie" },
   { key: "formulario", label: "Formulario global", icon: "ci:note-edit" },
   { key: "eventos", label: "Eventos de atención", icon: "ci:calendar-event" },
-  { key: "unidades", label: "Unidades administrativas", icon: "ci:building-03" },
+  { key: "unidades", label: "Unidades", icon: "ci:building-03" },
   { key: "tramites", label: "Trámites y servicios", icon: "ci:list-checklist" },
   { key: "usuarios", label: "Usuarios y enlaces", icon: "ci:users-group" },
   { key: "solicitudes", label: "Solicitudes", icon: "ci:file-document" },
 ];
 const secretaryNav: { key: SecretarySection; label: string; icon: string }[] = [
-  { key: "resumen", label: "Resumen ejecutivo", icon: "ci:chart-pie" },
+  { key: "resumen", label: "Dashboard general", icon: "ci:chart-pie" },
   { key: "eventos", label: "Eventos y mapa", icon: "ci:map" },
-  { key: "solicitudes", label: "Reporte de solicitudes", icon: "ci:file-document" },
+  { key: "reporte", label: "Reporte por evento", icon: "ci:file-document" },
+  { key: "solicitudes", label: "Solicitudes", icon: "ci:list-checklist" },
 ];
+
+const ROLE_DETAILS = {
+  capturista: {
+    title: "Capturista",
+    description: "Pertenece a una unidad administrativa para identificar su área. Registra solicitudes y consulta únicamente las que ha capturado, sin permisos de gestión.",
+  },
+  capturista_secretaria: {
+    title: "Capturista de Secretaría",
+    description: "Registra solicitudes en representación de Secretaría. Todas sus capturas se envían automáticamente como prioritarias y no está ligado a una unidad administrativa.",
+  },
+  gestor: {
+    title: "Gestor",
+    description: "Atiende las solicitudes asignadas a su unidad, actualiza su estatus y registra comentarios y resultados.",
+  },
+  enlace: {
+    title: "Enlace de canalización",
+    description: "Analiza las solicitudes que una unidad marcó como «no corresponde» y las redirige a la unidad administrativa correcta, conservando el historial del movimiento.",
+  },
+  secretaria: {
+    title: "Secretaría",
+    description: "Consulta la información general, reportes, mapas, solicitudes e historial de los eventos, sin modificar la operación.",
+  },
+  super_admin: {
+    title: "Superadministrador",
+    description: "Administra eventos, unidades, trámites, formularios, usuarios, roles y la configuración general del sistema.",
+  },
+} as const;
 
 function Field({
   label,
@@ -186,7 +220,7 @@ function Metric({
   note,
 }: {
   label: string;
-  value: number;
+  value: number | string;
   note: string;
 }) {
   return (
@@ -198,12 +232,74 @@ function Metric({
   );
 }
 
+function EventMultiSelect({
+  events,
+  value,
+  onChange,
+  disabled,
+}: {
+  events: AttentionEvent[];
+  value: string[];
+  onChange: (value: string[]) => void;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState({ top: 0, left: 0, width: 320 });
+  const anchorRef = React.useRef<HTMLDivElement>(null);
+  const selectedNames = events.filter((event) => value.includes(event.id)).map((event) => event.name);
+  const toggle = (id: string) => onChange(value.includes(id) ? value.filter((item) => item !== id) : [...value, id]);
+  const toggleMenu = () => {
+    if (!open && anchorRef.current) {
+      const rect = anchorRef.current.getBoundingClientRect();
+      setMenuPosition({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    }
+    setOpen((current) => !current);
+  };
+
+  return (
+    <div ref={anchorRef} className="relative min-w-0 basis-80 flex-1">
+      <Text className="text-sm font-semibold">Eventos</Text>
+      <Pressable
+        disabled={disabled}
+        onPress={toggleMenu}
+        className={`mt-2 min-h-11 flex-row items-center justify-between rounded-lg border border-zinc-300 bg-background px-3 py-2 ${disabled ? "cursor-not-allowed opacity-40" : "hover:border-primary"}`}
+      >
+        <Text className={`flex-1 ${value.length ? "font-medium" : "text-muted-foreground"}`} numberOfLines={1}>
+          {!value.length ? "Seleccionar eventos" : value.length === 1 ? selectedNames[0] : `${value.length} eventos seleccionados`}
+        </Text>
+        <Text className="ml-3 text-muted-foreground">{open ? "▲" : "▼"}</Text>
+      </Pressable>
+      {open && !disabled && typeof document !== "undefined" ? createPortal(
+        <div className="max-h-72 overflow-y-auto rounded-xl border border-border bg-card p-2 shadow-2xl" style={{ position: "fixed", top: menuPosition.top, left: menuPosition.left, width: menuPosition.width, zIndex: 2147483647 }}>
+          <View className="mb-2 flex-row items-center justify-between border-b border-border px-2 pb-2">
+            <Text className="text-xs font-semibold text-muted-foreground">{value.length} seleccionados</Text>
+            {value.length ? <Pressable onPress={() => onChange([])}><Text className="text-xs font-semibold text-primary">Limpiar</Text></Pressable> : null}
+          </View>
+          {(events || []).map((event) => {
+            const checked = value.includes(event.id);
+            return (
+              <Pressable key={event.id} onPress={() => toggle(event.id)} className={`mb-1 flex-row items-center gap-3 rounded-lg p-3 ${checked ? "bg-primary/10" : "hover:bg-muted"}`}>
+                <View className={`h-5 w-5 items-center justify-center rounded border ${checked ? "border-primary bg-primary" : "border-zinc-300"}`}><Text className="text-xs font-bold text-white">{checked ? "✓" : ""}</Text></View>
+                <View className="flex-1"><Text className="font-medium">{event.name}</Text><Text className="text-xs text-muted-foreground">{event.locality}, {event.municipality}</Text></View>
+              </Pressable>
+            );
+          })}
+          {!events.length ? <Text className="p-3 text-center text-muted-foreground">No hay eventos disponibles.</Text> : null}
+        </div>,
+        document.body,
+      ) : null}
+    </div>
+  );
+}
+
 function OperationalSidebar({
   active,
   title,
+  onSectionChange,
 }: {
-  active: "bandeja" | "canalizacion";
+  active: "bandeja" | "canalizacion" | "reportes";
   title: string;
+  onSectionChange?: (section: "canalizacion" | "reportes") => void;
 }) {
   const { user, logout } = useAuth();
   const router = useRouter();
@@ -216,7 +312,11 @@ function OperationalSidebar({
     (unit) => unit.id === user?.unidadAdministrativaId,
   );
   const itemClass = (selected: boolean) =>
-    `w-full rounded-xl px-4 py-3 ${selected ? "bg-primary" : "hover:bg-muted"}`;
+    `w-full flex-row items-center gap-3 rounded-xl px-4 py-3 ${selected ? "bg-primary" : "hover:bg-muted"}`;
+  const canalizationNav = [
+    { key: "canalizacion" as const, label: "Mesa de canalización", icon: "ci:list-checklist" },
+    { key: "reportes" as const, label: "Reportes", icon: "ci:chart-pie" },
+  ];
   return (
     <View className="w-72 border-r border-border bg-card p-5">
       <View className="mb-8 border-b border-border pb-5">
@@ -224,23 +324,31 @@ function OperationalSidebar({
         <Text className="mt-1 text-xs text-muted-foreground">{title}</Text>
       </View>
       <View className="gap-2">
-        <Pressable className={itemClass(active === "bandeja" || active === "canalizacion")}>
-          <Text className="font-semibold text-primary-foreground">{active === "canalizacion" ? "Mesa de canalización" : "Bandeja de solicitudes"}</Text>
-        </Pressable>
-        <Pressable onPress={() => router.push("/home" as any)} className={itemClass(false)}>
-          <Text className="font-medium">＋ Nueva captura</Text>
-          <Text className="mt-1 text-xs text-muted-foreground">Registrar una solicitud</Text>
-        </Pressable>
+        {active === "bandeja" ? (
+          <>
+            <Pressable className={itemClass(true)}>
+              <Monicon name="ci:list-checklist" size={20} color="#ffffff" />
+              <Text className="font-semibold text-primary-foreground">Bandeja de solicitudes</Text>
+            </Pressable>
+            <Pressable onPress={() => router.push("/home" as any)} className="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+              <Text className="font-semibold text-primary">＋ Nueva captura</Text>
+              <Text className="mt-1 text-xs text-muted-foreground">Registrar solicitud asistida</Text>
+            </Pressable>
+          </>
+        ) : (
+          canalizationNav.map((item) => (
+            <Pressable key={item.key} onPress={() => onSectionChange?.(item.key)} className={itemClass(active === item.key)}>
+              <Monicon name={item.icon} size={20} color={active === item.key ? "#ffffff" : "#71717a"} />
+              <Text className={`font-medium ${active === item.key ? "text-primary-foreground" : ""}`}>{item.label}</Text>
+            </Pressable>
+          ))
+        )}
       </View>
       <View className="mt-auto border-t border-border pt-5">
         <Text className="font-semibold">{user?.nombre}</Text>
-        <Text className="mt-1 text-xs capitalize text-muted-foreground">{user?.role?.replaceAll("_", " ")}</Text>
-        <View className="mb-4 mt-3 rounded-lg bg-muted p-3">
-          <Text className="text-[10px] font-bold uppercase text-muted-foreground">Unidad administrativa</Text>
-          <Text className="mt-1 text-sm font-semibold">
-            {units.isLoading ? "Cargando..." : assignedUnit?.name || "Sin unidad asignada"}
-          </Text>
-        </View>
+        <Text className="mb-4 mt-1 text-xs text-muted-foreground">
+          {active === "canalizacion" || active === "reportes" ? "Rol: Enlace de canalización" : `Rol: Gestor · ${units.isLoading ? "Cargando..." : assignedUnit?.name || "Sin unidad asignada"}`}
+        </Text>
         <Button variant="outline" onPress={logout}><Text>Cerrar sesión</Text></Button>
       </View>
     </View>
@@ -255,7 +363,12 @@ const formatEventDateTime = (value: string) =>
     timeStyle: "short",
   });
 const formatRequestValue = (value: unknown) => {
-  if (typeof value !== "string") return String(value ?? "—");
+  if (typeof value !== "string") {
+    if (value && typeof value === "object") {
+      try { return JSON.stringify(value); } catch { return "Información no disponible"; }
+    }
+    return String(value ?? "—");
+  }
   try {
     const parsed = JSON.parse(value);
     return parsed?.name ? `Archivo: ${parsed.name}` : value;
@@ -369,6 +482,7 @@ function GestorDashboard() {
     queryKey: ["gestor", "requests", user?.unidadAdministrativaId],
     queryFn: () => requestsService.listByUnit(user!.unidadAdministrativaId!),
     enabled: Boolean(user?.unidadAdministrativaId),
+    refetchOnWindowFocus: true,
   });
   const services = useQuery({ queryKey: ["gestor", "services"], queryFn: adminService.listServices });
   const events = useQuery({ queryKey: ["gestor", "events"], queryFn: adminService.listEvents });
@@ -414,275 +528,256 @@ function GestorDashboard() {
     <View className="h-screen flex-row bg-muted/30">
       <OperationalSidebar active="bandeja" title="Gestión de solicitudes" />
       <View className="flex-1 overflow-hidden">
-      <View className="flex-row items-center justify-between border-b border-border bg-card px-8 py-5">
-        <View>
-          <Text className="text-2xl font-bold">Atención de solicitudes</Text>
-          <Text className="mt-1 text-sm text-muted-foreground">
-            {user?.nombre} · Solicitudes de tu unidad administrativa
-          </Text>
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
-        {notice ? (
-          <View className="rounded-xl border border-primary/30 bg-primary/10 p-3">
-            <Text className="text-primary">{notice}</Text>
-          </View>
-        ) : null}
-        {!user?.unidadAdministrativaId ? (
-          <View className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
-            <Text className="font-semibold text-destructive">Tu cuenta de Gestor no tiene una unidad administrativa asignada.</Text>
-            <Text className="mt-1 text-sm text-muted-foreground">Solicita al Superadministrador que relacione tu perfil con la unidad correspondiente.</Text>
-          </View>
-        ) : null}
-        {requests.isLoading ? <ActivityIndicator color="#981646" /> : null}
-        <View className="rounded-2xl border border-border bg-card p-5">
-          <View className="mb-4 flex-row flex-wrap items-end gap-3">
-            <View className="min-w-56 flex-1 gap-2">
-              <Text className="text-sm font-semibold">Filtrar por trámite</Text>
-              <select value={serviceFilter} onChange={(event) => setServiceFilter(event.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2">
-                <option value="">Todos los trámites</option>
-                {(services.data || []).filter((service) => service.unitId === user?.unidadAdministrativaId).map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}
-              </select>
-            </View>
-            <View className="min-w-48 flex-1 gap-2">
-              <Text className="text-sm font-semibold">Filtrar por estatus</Text>
-              <select value={statusFilter} onChange={(event) => setStatusFilter(event.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2">
-                <option value="">Todos los estatus</option>
-                {["enviada", ...REQUEST_STATUSES].map((status) => <option key={status} value={status}>{REQUEST_STATUS_LABELS[status] || status}</option>)}
-              </select>
-            </View>
-            <Button variant="outline" onPress={() => { setStatusFilter(""); setServiceFilter(""); }}><Text>Limpiar filtros</Text></Button>
-          </View>
-          <View className="overflow-hidden rounded-xl border border-border">
-            <View className="grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr] gap-3 bg-muted px-4 py-3">
-              <Text className="text-xs font-bold">FOLIO</Text>
-              <Text className="text-xs font-bold">TRÁMITE</Text>
-              <Text className="text-xs font-bold">EVENTO</Text>
-              <Text className="text-xs font-bold">CAPTURISTA</Text>
-              <Text className="text-xs font-bold">ESTATUS</Text>
-            </View>
-            {filteredRequests.map((request) => (
-              <Pressable key={request.id} onPress={() => router.push(`/admin/solicitud/${request.id}` as any)} className="grid grid-cols-[1fr_1.8fr_1fr_1fr_1fr] gap-3 border-t border-border px-4 py-4 hover:bg-muted/50">
-                <View>
-                  <Text className="font-semibold">{request.folio}</Text>
-                  <Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleDateString("es-MX")}</Text>
-                  {request.priorityOnReopening ? (
-                    <Text className="mt-1 text-xs font-bold text-amber-700">PRIORIDAD AL REABRIR</Text>
-                  ) : null}
-                </View>
-                <Text>{serviceNames[request.serviceId] || "Trámite no disponible"}</Text>
-                <Text>{request.eventId ? eventNames[request.eventId] || request.eventFolio || "Evento" : "Fuera de evento"}</Text>
-                <Text>{staffNames[request.applicantUserId] || "No identificado"}</Text>
-                <Text className="text-primary">{REQUEST_STATUS_LABELS[request.status] || request.status}</Text>
-              </Pressable>
-            ))}
-            {!filteredRequests.length && !requests.isLoading ? <Text className="p-8 text-center text-muted-foreground">No hay solicitudes que coincidan con los filtros.</Text> : null}
+        <View className="flex-row items-center justify-between border-b border-border bg-card px-8 py-5">
+          <View>
+            <Text className="text-2xl font-bold">Atención de solicitudes</Text>
+            <Text className="mt-1 text-sm text-muted-foreground">
+              {user?.nombre} · Solicitudes de tu unidad administrativa
+            </Text>
           </View>
         </View>
-        {false && selectedRequest ? [selectedRequest].map((request) => {
-          const draft = drafts[request.id] || {
-            status: request.status,
-            comment: request.notes || "",
-            discontinuationReason: request.discontinuationReason || "",
-            receivedBenefit: request.receivedBenefit,
-            benefitDetail: request.benefitDetail || "",
-          };
-          return (
-            <View
-              key={request.id}
-              className="gap-4 rounded-2xl border border-border bg-card p-5"
-            >
-              <View className="flex-row items-center justify-between border-b border-border pb-4">
-                <View>
-                  <Text className="text-xl font-bold">Detalle de la solicitud</Text>
-                  <Text className="mt-1 text-sm text-muted-foreground">Consulta el expediente completo y registra el seguimiento.</Text>
+        <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
+          {notice ? (
+            <View className="rounded-xl border border-primary/30 bg-primary/10 p-3">
+              <Text className="text-primary">{notice}</Text>
+            </View>
+          ) : null}
+          {!user?.unidadAdministrativaId ? (
+            <View className="rounded-xl border border-destructive/30 bg-destructive/5 p-4">
+              <Text className="font-semibold text-destructive">Tu cuenta de Gestor no tiene una unidad administrativa asignada.</Text>
+              <Text className="mt-1 text-sm text-muted-foreground">Solicita al Superadministrador que relacione tu perfil con la unidad correspondiente.</Text>
+            </View>
+          ) : null}
+          {requests.isLoading ? <ActivityIndicator color="#981646" /> : null}
+          <AdminDataTable
+            data={requests.data || []}
+            getRowId={(request) => request.id}
+            searchPlaceholder="Buscar por folio, trámite, evento o capturista..."
+            filterLabel="Todos los estatus"
+            filterOptions={["enviada", ...REQUEST_STATUSES].map((status) => ({
+              label: REQUEST_STATUS_LABELS[status] || status,
+              value: status,
+            }))}
+            getFilterValue={(request) => request.status}
+            emptyMessage="No hay solicitudes asignadas a tu unidad."
+            columns={[
+              {
+                key: "folio",
+                title: "FOLIO",
+                value: (request) => request.folio,
+                width: 180,
+                render: (request) => <View><Text className="font-semibold">{request.folio}</Text><Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleDateString("es-MX")}</Text>{request.priorityOnReopening ? <Text className="mt-1 text-xs font-bold text-amber-700">PRIORITARIA</Text> : null}</View>,
+              },
+              { key: "service", title: "TRÁMITE", value: (request) => serviceNames[request.serviceId] || "Trámite no disponible", width: 260 },
+              { key: "event", title: "EVENTO", value: (request) => request.eventId ? eventNames[request.eventId] || request.eventFolio || "Evento" : "Fuera de evento", width: 220 },
+              { key: "staff", title: "CAPTURISTA", value: (request) => staffNames[request.applicantUserId] || "No identificado", width: 190 },
+              { key: "status", title: "ESTATUS", value: (request) => REQUEST_STATUS_LABELS[request.status] || request.status, width: 150, render: (request) => <Text className="font-semibold text-primary">{REQUEST_STATUS_LABELS[request.status] || request.status}</Text> },
+            ]}
+            renderActions={(request) => (
+              <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${request.id}` as any)}>
+                <Text>Ver detalles</Text>
+              </Button>
+            )}
+          />
+          {false && selectedRequest ? [selectedRequest].map((request) => {
+            const draft = drafts[request.id] || {
+              status: request.status,
+              comment: request.notes || "",
+              discontinuationReason: request.discontinuationReason || "",
+              receivedBenefit: request.receivedBenefit,
+              benefitDetail: request.benefitDetail || "",
+            };
+            return (
+              <View
+                key={request.id}
+                className="gap-4 rounded-2xl border border-border bg-card p-5"
+              >
+                <View className="flex-row items-center justify-between border-b border-border pb-4">
+                  <View>
+                    <Text className="text-xl font-bold">Detalle de la solicitud</Text>
+                    <Text className="mt-1 text-sm text-muted-foreground">Consulta el expediente completo y registra el seguimiento.</Text>
+                  </View>
+                  <Button variant="outline" onPress={() => setSelectedRequestId(null)}><Text>Cerrar detalle</Text></Button>
                 </View>
-                <Button variant="outline" onPress={() => setSelectedRequestId(null)}><Text>Cerrar detalle</Text></Button>
-              </View>
-              <View className="flex-row items-start justify-between">
-                <View>
-                  <Text className="text-lg font-bold">{request.folio}</Text>
-                  <Text className="mt-1 text-xs text-muted-foreground">
-                    Evento: {request.eventFolio || "Sin folio"} ·{" "}
-                    {new Date(request.requestedAt).toLocaleString("es-MX")}
-                  </Text>
+                <View className="flex-row items-start justify-between">
+                  <View>
+                    <Text className="text-lg font-bold">{request.folio}</Text>
+                    <Text className="mt-1 text-xs text-muted-foreground">
+                      Evento: {request.eventFolio || "Sin folio"} ·{" "}
+                      {new Date(request.requestedAt).toLocaleString("es-MX")}
+                    </Text>
+                  </View>
+                  <View className="items-end gap-1">
+                    <Text className="text-primary">
+                      {REQUEST_STATUS_LABELS[request.status] || request.status.replaceAll("_", " ")}
+                    </Text>
+                    {request.priorityOnReopening ? (
+                      <Text className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Prioritaria</Text>
+                    ) : null}
+                  </View>
                 </View>
-                <View className="items-end gap-1">
-                  <Text className="text-primary">
-                    {REQUEST_STATUS_LABELS[request.status] || request.status.replaceAll("_", " ")}
-                  </Text>
-                  {request.priorityOnReopening ? (
-                    <Text className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Prioridad al reabrir</Text>
-                  ) : null}
+                <View className="grid grid-cols-3 gap-3">
+                  <View className="rounded-xl bg-muted/50 p-4">
+                    <Text className="text-xs font-bold text-muted-foreground">TRÁMITE</Text>
+                    <Text className="mt-1 font-semibold">{serviceNames[request.serviceId] || "No disponible"}</Text>
+                  </View>
+                  <View className="rounded-xl bg-muted/50 p-4">
+                    <Text className="text-xs font-bold text-muted-foreground">EVENTO</Text>
+                    <Text className="mt-1 font-semibold">{request.eventId ? eventNames[request.eventId] || request.eventFolio || "Evento no disponible" : "Captura fuera de evento"}</Text>
+                    {request.eventFolio ? <Text className="mt-1 text-xs text-muted-foreground">Folio: {request.eventFolio}</Text> : null}
+                  </View>
+                  <View className="rounded-xl bg-muted/50 p-4">
+                    <Text className="text-xs font-bold text-muted-foreground">CAPTURISTA</Text>
+                    <Text className="mt-1 font-semibold">{staffNames[request.applicantUserId] || "No identificado"}</Text>
+                  </View>
                 </View>
-              </View>
-              <View className="grid grid-cols-3 gap-3">
-                <View className="rounded-xl bg-muted/50 p-4">
-                  <Text className="text-xs font-bold text-muted-foreground">TRÁMITE</Text>
-                  <Text className="mt-1 font-semibold">{serviceNames[request.serviceId] || "No disponible"}</Text>
-                </View>
-                <View className="rounded-xl bg-muted/50 p-4">
-                  <Text className="text-xs font-bold text-muted-foreground">EVENTO</Text>
-                  <Text className="mt-1 font-semibold">{request.eventId ? eventNames[request.eventId] || request.eventFolio || "Evento no disponible" : "Captura fuera de evento"}</Text>
-                  {request.eventFolio ? <Text className="mt-1 text-xs text-muted-foreground">Folio: {request.eventFolio}</Text> : null}
-                </View>
-                <View className="rounded-xl bg-muted/50 p-4">
-                  <Text className="text-xs font-bold text-muted-foreground">CAPTURISTA</Text>
-                  <Text className="mt-1 font-semibold">{staffNames[request.applicantUserId] || "No identificado"}</Text>
-                </View>
-              </View>
-              <View className="grid grid-cols-2 gap-4">
-                <View className="rounded-xl border border-border p-4">
-                  <Text className="mb-3 text-lg font-bold">Información del solicitante</Text>
-                  {Object.entries(request.applicantData || {}).map(([key, value]) => (
-                    <View key={key} className="mb-2 border-b border-border/50 pb-2">
-                      <Text className="text-xs font-semibold uppercase text-muted-foreground">{key.replaceAll("_", " ")}</Text>
-                      <Text className="mt-1">{formatRequestValue(value)}</Text>
-                    </View>
-                  ))}
-                  {!Object.keys(request.applicantData || {}).length ? <Text className="text-muted-foreground">Sin información disponible.</Text> : null}
-                </View>
-                <View className="rounded-xl border border-border p-4">
-                  <Text className="mb-3 text-lg font-bold">Información del trámite</Text>
-                  {Object.entries(request.requestData || {}).map(([key, value]) => (
-                    <View key={key} className="mb-2 border-b border-border/50 pb-2">
-                      <Text className="text-xs font-semibold uppercase text-muted-foreground">{key.replaceAll("_", " ")}</Text>
-                      <Text className="mt-1">{formatRequestValue(value)}</Text>
-                    </View>
-                  ))}
-                  {!Object.keys(request.requestData || {}).length ? <Text className="text-muted-foreground">Sin información disponible.</Text> : null}
-                </View>
-              </View>
-              <Text className="mt-2 text-lg font-bold">Actualizar seguimiento</Text>
-              <View className="grid grid-cols-[260px_1fr_auto] items-end gap-3">
-                <View className="gap-2">
-                  <Text className="text-sm font-semibold">Nuevo estatus</Text>
-                  <select
-                    value={draft.status}
-                    onChange={(event) =>
-                      setDrafts((current) => ({
-                        ...current,
-                        [request.id]: {
-                          ...draft,
-                          status: event.currentTarget.value,
-                        },
-                      }))
-                    }
-                    style={{
-                      minHeight: 40,
-                      border: "1px solid #d4d4d8",
-                      borderRadius: 8,
-                      padding: "8px 12px",
-                      background: "transparent",
-                      color: "inherit",
-                    }}
-                  >
-                    {REQUEST_STATUSES.map((status) => (
-                      <option key={status} value={status}>
-                        {REQUEST_STATUS_LABELS[status] || status.replaceAll("_", " ")}
-                      </option>
+                <View className="grid grid-cols-2 gap-4">
+                  <View className="rounded-xl border border-border p-4">
+                    <Text className="mb-3 text-lg font-bold">Información del solicitante</Text>
+                    {Object.entries(request.applicantData || {}).map(([key, value]) => (
+                      <View key={key} className="mb-2 border-b border-border/50 pb-2">
+                        <Text className="text-xs font-semibold uppercase text-muted-foreground">{key.replaceAll("_", " ")}</Text>
+                        <Text className="mt-1">{formatRequestValue(value)}</Text>
+                      </View>
                     ))}
-                  </select>
+                    {!Object.keys(request.applicantData || {}).length ? <Text className="text-muted-foreground">Sin información disponible.</Text> : null}
+                  </View>
+                  <View className="rounded-xl border border-border p-4">
+                    <Text className="mb-3 text-lg font-bold">Información del trámite</Text>
+                    {Object.entries(request.requestData || {}).map(([key, value]) => (
+                      <View key={key} className="mb-2 border-b border-border/50 pb-2">
+                        <Text className="text-xs font-semibold uppercase text-muted-foreground">{key.replaceAll("_", " ")}</Text>
+                        <Text className="mt-1">{formatRequestValue(value)}</Text>
+                      </View>
+                    ))}
+                    {!Object.keys(request.requestData || {}).length ? <Text className="text-muted-foreground">Sin información disponible.</Text> : null}
+                  </View>
                 </View>
-                <Field
-                  label="Comentario de atención"
-                  value={draft.comment}
-                  onChangeText={(comment) =>
-                    setDrafts((current) => ({
-                      ...current,
-                      [request.id]: { ...draft, comment },
-                    }))
-                  }
-                  placeholder="Describe la atención o resolución"
-                />
-                {draft.status === "rechazada" || draft.status === "cancelada" ? (
+                <Text className="mt-2 text-lg font-bold">Actualizar seguimiento</Text>
+                <View className="grid grid-cols-[260px_1fr_auto] items-end gap-3">
+                  <View className="gap-2">
+                    <Text className="text-sm font-semibold">Nuevo estatus</Text>
+                    <select
+                      value={draft.status}
+                      onChange={(event) =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [request.id]: {
+                            ...draft,
+                            status: event.currentTarget.value,
+                          },
+                        }))
+                      }
+                      style={{
+                        minHeight: 40,
+                        border: "1px solid #d4d4d8",
+                        borderRadius: 8,
+                        padding: "8px 12px",
+                        background: "transparent",
+                        color: "inherit",
+                      }}
+                    >
+                      {REQUEST_STATUSES.map((status) => (
+                        <option key={status} value={status}>
+                          {REQUEST_STATUS_LABELS[status] || status.replaceAll("_", " ")}
+                        </option>
+                      ))}
+                    </select>
+                  </View>
                   <Field
-                    label="Motivo por el que no continuó"
-                    value={draft.discontinuationReason}
-                    onChangeText={(discontinuationReason) =>
+                    label="Comentario de atención"
+                    value={draft.comment}
+                    onChangeText={(comment) =>
                       setDrafts((current) => ({
                         ...current,
-                        [request.id]: { ...draft, discontinuationReason },
+                        [request.id]: { ...draft, comment },
                       }))
                     }
-                    placeholder="Motivo obligatorio"
+                    placeholder="Describe la atención o resolución"
                   />
-                ) : null}
-                {draft.status === "concluida" ? (
-                  <View className="gap-3 rounded-xl bg-muted/50 p-4">
-                    <Text className="font-semibold">¿Recibió el apoyo, trámite o beneficio?</Text>
-                    <View className="flex-row flex-wrap gap-2">
-                      {[true, false].map((receivedBenefit) => (
-                        <Pressable
-                          key={String(receivedBenefit)}
-                          onPress={() => setDrafts((current) => ({
-                            ...current,
-                            [request.id]: { ...draft, receivedBenefit },
-                          }))}
-                          className={`rounded-lg border px-4 py-2 ${draft.receivedBenefit === receivedBenefit ? "border-primary bg-primary/10" : "border-border"}`}
-                        >
-                          <Text>{receivedBenefit ? "Sí, fue beneficiario" : "No recibió beneficio"}</Text>
-                        </Pressable>
-                      ))}
+                  {draft.status === "rechazada" || draft.status === "cancelada" ? (
+                    <Field
+                      label="Motivo por el que no continuó"
+                      value={draft.discontinuationReason}
+                      onChangeText={(discontinuationReason) =>
+                        setDrafts((current) => ({
+                          ...current,
+                          [request.id]: { ...draft, discontinuationReason },
+                        }))
+                      }
+                      placeholder="Motivo obligatorio"
+                    />
+                  ) : null}
+                  {draft.status === "concluida" ? (
+                    <View className="gap-3 rounded-xl bg-muted/50 p-4">
+                      <Text className="font-semibold">¿Recibió el apoyo, trámite o beneficio?</Text>
+                      <View className="flex-row flex-wrap gap-2">
+                        {[true, false].map((receivedBenefit) => (
+                          <Pressable
+                            key={String(receivedBenefit)}
+                            onPress={() => setDrafts((current) => ({
+                              ...current,
+                              [request.id]: { ...draft, receivedBenefit },
+                            }))}
+                            className={`rounded-lg border px-4 py-2 ${draft.receivedBenefit === receivedBenefit ? "border-primary bg-primary/10" : "border-border"}`}
+                          >
+                            <Text>{receivedBenefit ? "Sí, fue beneficiario" : "No recibió beneficio"}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
+                      <Field
+                        label="Detalle del resultado"
+                        value={draft.benefitDetail}
+                        onChangeText={(benefitDetail) => setDrafts((current) => ({
+                          ...current,
+                          [request.id]: { ...draft, benefitDetail },
+                        }))}
+                        placeholder="Describe qué recibió o por qué concluyó sin beneficio"
+                      />
+                    </View>
+                  ) : null}
+                  <Button
+                    disabled={
+                      update.isPending ||
+                      ((draft.status === "rechazada" || draft.status === "cancelada") && !draft.discontinuationReason.trim()) ||
+                      (draft.status === "concluida" && typeof draft.receivedBenefit !== "boolean")
+                    }
+                    onPress={() => update.mutate({ id: request.id })}
+                  >
+                    <Text>
+                      {update.isPending ? "Guardando..." : "Actualizar"}
+                    </Text>
+                  </Button>
+                </View>
+                {!request.reassignmentRequired ? (
+                  <View className="gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
+                    <View>
+                      <Text className="font-semibold text-amber-900">¿El trámite no corresponde a tu unidad?</Text>
+                      <Text className="text-sm text-amber-800">Envíalo al Enlace para que revise el expediente y lo canalice correctamente.</Text>
                     </View>
                     <Field
-                      label="Detalle del resultado"
-                      value={draft.benefitDetail}
-                      onChangeText={(benefitDetail) => setDrafts((current) => ({
-                        ...current,
-                        [request.id]: { ...draft, benefitDetail },
-                      }))}
-                      placeholder="Describe qué recibió o por qué concluyó sin beneficio"
+                      label="Motivo de no aplicación"
+                      value={reassignmentReasons[request.id] || ""}
+                      onChangeText={(reason) => setReassignmentReasons((current) => ({ ...current, [request.id]: reason }))}
+                      placeholder="Explica por qué no aplica y qué atención parece requerir"
                     />
+                    <View className="items-start">
+                      <Button
+                        variant="outline"
+                        disabled={requestReassignment.isPending || !reassignmentReasons[request.id]?.trim()}
+                        onPress={() => requestReassignment.mutate({ id: request.id, reason: reassignmentReasons[request.id] })}
+                      >
+                        <Text>Marcar “No aplica” y solicitar canalización</Text>
+                      </Button>
+                    </View>
                   </View>
-                ) : null}
-                <Button
-                  disabled={
-                    update.isPending ||
-                    ((draft.status === "rechazada" || draft.status === "cancelada") && !draft.discontinuationReason.trim()) ||
-                    (draft.status === "concluida" && typeof draft.receivedBenefit !== "boolean")
-                  }
-                  onPress={() => update.mutate({ id: request.id })}
-                >
-                  <Text>
-                    {update.isPending ? "Guardando..." : "Actualizar"}
-                  </Text>
-                </Button>
+                ) : (
+                  <Text className="rounded-xl bg-amber-100 p-3 font-semibold text-amber-900">Pendiente de canalización por el Enlace</Text>
+                )}
               </View>
-              {!request.reassignmentRequired ? (
-                <View className="gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4">
-                  <View>
-                    <Text className="font-semibold text-amber-900">¿El trámite no corresponde a tu unidad?</Text>
-                    <Text className="text-sm text-amber-800">Envíalo al Enlace para que revise el expediente y lo canalice correctamente.</Text>
-                  </View>
-                  <Field
-                    label="Motivo de no aplicación"
-                    value={reassignmentReasons[request.id] || ""}
-                    onChangeText={(reason) => setReassignmentReasons((current) => ({ ...current, [request.id]: reason }))}
-                    placeholder="Explica por qué no aplica y qué atención parece requerir"
-                  />
-                  <View className="items-start">
-                    <Button
-                      variant="outline"
-                      disabled={requestReassignment.isPending || !reassignmentReasons[request.id]?.trim()}
-                      onPress={() => requestReassignment.mutate({ id: request.id, reason: reassignmentReasons[request.id] })}
-                    >
-                      <Text>Marcar “No aplica” y solicitar canalización</Text>
-                    </Button>
-                  </View>
-                </View>
-              ) : (
-                <Text className="rounded-xl bg-amber-100 p-3 font-semibold text-amber-900">Pendiente de canalización por el Enlace</Text>
-              )}
-            </View>
-          );
-        }) : null}
-        {!requests.isLoading && !requests.data?.length ? (
-          <Text className="py-16 text-center text-muted-foreground">
-            No hay solicitudes asignadas a tu unidad.
-          </Text>
-        ) : null}
-      </ScrollView>
+            );
+          }) : null}
+        </ScrollView>
       </View>
     </View>
   );
@@ -690,7 +785,9 @@ function GestorDashboard() {
 
 function EnlaceDashboard() {
   const { user } = useAuth();
+  const router = useRouter();
   const queryClient = useQueryClient();
+  const [section, setSection] = useState<"canalizacion" | "reportes">("canalizacion");
   const [destinations, setDestinations] = useState<Record<string, string>>({});
   const [comments, setComments] = useState<Record<string, string>>({});
   const [notice, setNotice] = useState<string | null>(null);
@@ -698,15 +795,59 @@ function EnlaceDashboard() {
     queryKey: ["enlace", "reassignment-queue"],
     queryFn: identityApi.listReassignmentQueue,
   });
+  const report = useQuery({
+    queryKey: ["enlace", "canalization-report"],
+    queryFn: identityApi.getCanalizationReport,
+  });
   const units = useQuery({ queryKey: ["enlace", "units"], queryFn: adminService.listUnits });
   const services = useQuery({ queryKey: ["enlace", "services"], queryFn: adminService.listServices });
+  const events = useQuery({ queryKey: ["enlace", "events"], queryFn: adminService.listEvents });
+  const globalForm = useQuery({ queryKey: ["enlace", "global-form"], queryFn: adminService.getGlobalForm });
   const unitNames = useMemo(() => Object.fromEntries((units.data || []).map((unit) => [unit.id, unit.name])), [units.data]);
   const serviceNames = useMemo(() => Object.fromEntries((services.data || []).map((service) => [service.id, service.name])), [services.data]);
+  const eventsById = useMemo(
+    () => Object.fromEntries((events.data || []).map((event) => [event.id, event])),
+    [events.data],
+  );
+  const applicantFieldLabels = useMemo(
+    () => Object.fromEntries((globalForm.data?.fields || []).map((field) => [field.key, field.label])),
+    [globalForm.data?.fields],
+  );
+  const requestFieldLabels = useMemo(
+    () => Object.fromEntries((services.data || []).map((service) => [
+      service.id,
+      Object.fromEntries((service.formConfig?.fields || []).map((field) => [field.key, field.label])),
+    ])),
+    [services.data],
+  );
+  const reportItems = report.data?.items || [];
+  const pendingCount = reportItems.filter((item) => item.pending).length;
+  const resolvedItems = reportItems.filter((item) => !item.pending);
+  const averageHours = resolvedItems.length
+    ? resolvedItems.reduce((total, item) => total + Math.max(0, new Date(item.resolvedAt || item.requestedAt).getTime() - new Date(item.requestedAt).getTime()), 0) / resolvedItems.length / 3_600_000
+    : 0;
+  const originChart = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of report.data?.items || []) {
+      const id = item.previousUnitId || "sin-unidad";
+      counts.set(id, (counts.get(id) || 0) + 1);
+    }
+    return [...counts.entries()].map(([id, value]) => ({ label: unitNames[id] || "Sin unidad", value })).sort((a, b) => b.value - a.value);
+  }, [report.data?.items, unitNames]);
+  const destinationChart = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const item of report.data?.items || []) {
+      if (!item.destinationUnitId) continue;
+      counts.set(item.destinationUnitId, (counts.get(item.destinationUnitId) || 0) + 1);
+    }
+    return [...counts.entries()].map(([id, value]) => ({ label: unitNames[id] || "Unidad no disponible", value })).sort((a, b) => b.value - a.value);
+  }, [report.data?.items, unitNames]);
   const reassign = useMutation({
     mutationFn: ({ requestId, unitId }: { requestId: string; unitId: string }) =>
       identityApi.reassignRequest(requestId, unitId, comments[requestId]),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["enlace", "reassignment-queue"] });
+      await queryClient.invalidateQueries({ queryKey: ["enlace", "canalization-report"] });
       setNotice("Solicitud canalizada correctamente a la unidad responsable.");
     },
     onError: (cause: Error) => setNotice(cause.message),
@@ -714,69 +855,183 @@ function EnlaceDashboard() {
 
   return (
     <View className="h-screen flex-row bg-muted/30">
-      <OperationalSidebar active="canalizacion" title="Enlace institucional" />
+      <OperationalSidebar active={section} title="Enlace de canalización" onSectionChange={setSection} />
       <View className="flex-1 overflow-hidden">
-      <View className="flex-row items-center justify-between border-b border-border bg-card px-8 py-5">
-        <View>
-          <Text className="text-2xl font-bold">Mesa de canalización</Text>
-          <Text className="mt-1 text-sm text-muted-foreground">{user?.nombre} · Revisión de solicitudes que no aplican en su unidad original</Text>
-        </View>
-      </View>
-      <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
-        <View className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
-          <Text className="text-lg font-bold">Función del Enlace</Text>
-          <Text className="mt-1 text-muted-foreground">Lee el motivo y los datos del expediente, identifica la unidad competente y canaliza la solicitud. El movimiento queda registrado en el historial.</Text>
-        </View>
-        {notice ? <Text className="rounded-xl bg-primary/10 p-3 text-primary">{notice}</Text> : null}
-        {queue.isLoading || units.isLoading || services.isLoading ? <ActivityIndicator color="#981646" /> : null}
-        {(queue.data?.requests || []).map((request) => (
-          <View key={request.id} className="gap-4 rounded-2xl border border-border bg-card p-5">
-            <View className="flex-row justify-between gap-4">
-              <View className="flex-1">
-                <Text className="text-lg font-bold">{request.folio}</Text>
-                <Text className="mt-1 text-sm text-muted-foreground">{serviceNames[request.serviceId] || "Trámite no identificado"} · Unidad actual: {unitNames[request.unitId] || request.unitId}</Text>
-              </View>
-              <Text className="font-semibold text-amber-700">Requiere canalización</Text>
-            </View>
-            <View className="rounded-xl bg-amber-50 p-4">
-              <Text className="text-xs font-bold text-amber-900">MOTIVO DEL GESTOR</Text>
-              <Text className="mt-1 text-amber-900">{request.reassignmentReason}</Text>
-            </View>
-            <View className="grid grid-cols-2 gap-4">
-              <View className="rounded-xl border border-border p-4">
-                <Text className="mb-3 font-bold">Datos de la persona solicitante</Text>
-                {Object.entries(request.applicantData || {}).map(([key, value]) => (
-                  <Text key={key} className="mb-1 text-sm"><Text className="font-semibold">{key.replaceAll("_", " ")}:</Text> {String(value || "—")}</Text>
-                ))}
-              </View>
-              <View className="rounded-xl border border-border p-4">
-                <Text className="mb-3 font-bold">Datos del trámite solicitado</Text>
-                {Object.entries(request.requestData || {}).map(([key, value]) => (
-                  <Text key={key} className="mb-1 text-sm"><Text className="font-semibold">{key.replaceAll("_", " ")}:</Text> {String(value || "—")}</Text>
-                ))}
-              </View>
-            </View>
-            <View className="gap-2">
-              <Text className="text-sm font-semibold">Canalizar a</Text>
-              <select
-                value={destinations[request.id] || ""}
-                onChange={(event) => setDestinations((current) => ({ ...current, [request.id]: event.currentTarget.value }))}
-                className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2"
-              >
-                <option value="">Selecciona la unidad responsable</option>
-                {(units.data || []).filter((unit) => unit.id !== request.unitId && unit.active).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
-              </select>
-            </View>
-            <Field label="Nota de canalización" value={comments[request.id] || ""} onChangeText={(comment) => setComments((current) => ({ ...current, [request.id]: comment }))} placeholder="Criterio utilizado para la reasignación" />
-            <View className="items-end">
-              <Button disabled={!destinations[request.id] || reassign.isPending} onPress={() => reassign.mutate({ requestId: request.id, unitId: destinations[request.id] })}>
-                <Text>{reassign.isPending ? "Canalizando..." : "Confirmar canalización"}</Text>
-              </Button>
-            </View>
+        <View className="flex-row items-center justify-between border-b border-border bg-card px-8 py-5">
+          <View>
+            <Text className="text-2xl font-bold">{section === "canalizacion" ? "Mesa de canalización" : "Reportes de canalización"}</Text>
+            <Text className="mt-1 text-sm text-muted-foreground">
+              {user?.nombre} · {section === "canalizacion" ? "Revisión de solicitudes que no aplican en su unidad original" : "Resultados globales de la canalización entre unidades"}
+            </Text>
           </View>
-        ))}
-        {!queue.isLoading && !queue.data?.requests.length ? <Text className="py-16 text-center text-muted-foreground">No hay solicitudes pendientes de canalización.</Text> : null}
-      </ScrollView>
+        </View>
+        <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
+          {section === "canalizacion" ? (
+            <>
+              <View className="rounded-2xl border border-primary/20 bg-primary/5 p-5">
+                <Text className="text-lg font-bold">Función del Enlace de canalización</Text>
+                <Text className="mt-1 text-muted-foreground">Lee el motivo y los datos del expediente, identifica la unidad competente y canaliza la solicitud. El movimiento queda registrado en el historial.</Text>
+              </View>
+              {notice ? <Text className="rounded-xl bg-primary/10 p-3 text-primary">{notice}</Text> : null}
+              {queue.isLoading || units.isLoading || services.isLoading || events.isLoading || globalForm.isLoading ? <ActivityIndicator color="#981646" /> : null}
+              {(queue.data?.requests || []).map((request) => (
+                <View key={request.id} className="gap-4 rounded-2xl border border-border bg-card p-5">
+                  <View className="flex-row justify-between gap-4">
+                    <View className="flex-1">
+                      <Text className="text-lg font-bold">{request.folio}</Text>
+                      <Text className="mt-1 text-sm text-muted-foreground">{serviceNames[request.serviceId] || "Trámite no identificado"} · Unidad actual: {unitNames[request.unitId] || request.unitId}</Text>
+                    </View>
+                    <Text className="font-semibold text-amber-700">Requiere canalización</Text>
+                  </View>
+                  <View className="rounded-xl bg-amber-50 p-4">
+                    <Text className="text-xs font-bold text-amber-900">MOTIVO DEL GESTOR</Text>
+                    <Text className="mt-1 text-amber-900">{request.reassignmentReason}</Text>
+                  </View>
+                  <View className="flex-row justify-end">
+                    <Button variant="outline" onPress={() => router.push(`/admin/solicitud/${request.id}` as any)}>
+                      <Text>Ver expediente completo</Text>
+                    </Button>
+                  </View>
+                  <View className="rounded-xl border border-border bg-muted/30 p-4">
+                    <Text className="text-xs font-bold text-muted-foreground">EVENTO DE ORIGEN</Text>
+                    {request.eventId && eventsById[request.eventId] ? (
+                      <View className="mt-2 gap-1">
+                        <Text className="font-semibold">{eventsById[request.eventId].name}</Text>
+                        <Text className="text-sm">Folio del evento: {request.eventFolio || eventsById[request.eventId].folioPrefix || "No disponible"}</Text>
+                        <Text className="text-sm text-muted-foreground">
+                          {eventsById[request.eventId].venue} · {eventsById[request.eventId].locality}, {eventsById[request.eventId].municipality}
+                        </Text>
+                        <Text className="text-sm text-muted-foreground">{eventsById[request.eventId].address}</Text>
+                        <Text className="text-xs text-muted-foreground">
+                          {new Date(eventsById[request.eventId].startsAt).toLocaleString("es-MX")} – {new Date(eventsById[request.eventId].endsAt).toLocaleString("es-MX")}
+                        </Text>
+                      </View>
+                    ) : (
+                      <Text className="mt-2 text-sm text-muted-foreground">
+                        {request.eventFolio ? `Evento con folio ${request.eventFolio}` : "Sin evento relacionado"}
+                      </Text>
+                    )}
+                  </View>
+                  <View className="grid grid-cols-2 gap-4">
+                    <View className="rounded-xl border border-border p-4">
+                      <Text className="mb-3 font-bold">Datos de la persona solicitante</Text>
+                      {Object.entries(request.applicantData || {}).filter(([key]) => !/^_*seguimiento$/i.test(key)).map(([key, value]) => (
+                        <Text key={key} className="mb-1 text-sm"><Text className="font-semibold">{applicantFieldLabels[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}:</Text> {formatRequestValue(value)}</Text>
+                      ))}
+                    </View>
+                    <View className="rounded-xl border border-border p-4">
+                      <Text className="mb-3 font-bold">Datos del trámite solicitado</Text>
+                      {Object.entries(request.requestData || {}).filter(([key]) => !/^_*seguimiento$/i.test(key)).map(([key, value]) => (
+                        <Text key={key} className="mb-1 text-sm"><Text className="font-semibold">{requestFieldLabels[request.serviceId]?.[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}:</Text> {formatRequestValue(value)}</Text>
+                      ))}
+                    </View>
+                  </View>
+                  <View className="gap-2">
+                    <Text className="text-sm font-semibold">Canalizar a</Text>
+                    <select
+                      value={destinations[request.id] || ""}
+                      onChange={(event) => {
+                        const unitId = event.currentTarget.value;
+                        setDestinations((current) => ({ ...current, [request.id]: unitId }));
+                      }}
+                      className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2"
+                    >
+                      <option value="">Selecciona la unidad responsable</option>
+                      {(units.data || []).filter((unit) => unit.id !== request.unitId && unit.active).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                    </select>
+                  </View>
+                  <Field label="Nota de canalización" value={comments[request.id] || ""} onChangeText={(comment) => setComments((current) => ({ ...current, [request.id]: comment }))} placeholder="Criterio utilizado para la reasignación" />
+                  <View className="items-end">
+                    <Button disabled={!destinations[request.id] || reassign.isPending} onPress={() => reassign.mutate({ requestId: request.id, unitId: destinations[request.id] })}>
+                      <Text>{reassign.isPending ? "Canalizando..." : "Confirmar canalización"}</Text>
+                    </Button>
+                  </View>
+                </View>
+              ))}
+              {!queue.isLoading && !queue.data?.requests.length ? <Text className="py-16 text-center text-muted-foreground">No hay solicitudes pendientes de canalización.</Text> : null}
+              <View className="mt-4 gap-4 border-t border-border pt-6">
+                <View>
+                  <Text className="text-xl font-bold">Solicitudes canalizadas</Text>
+                  <Text className="mt-1 text-sm text-muted-foreground">
+                    Historial de solicitudes que ya fueron enviadas a la unidad administrativa correspondiente.
+                  </Text>
+                </View>
+                <AdminDataTable
+                  data={resolvedItems}
+                  getRowId={(item) => item.id}
+                  searchPlaceholder="Buscar por folio, trámite, unidad o motivo..."
+                  emptyMessage="Todavía no se han canalizado solicitudes."
+                  columns={[
+                    { key: "folio", title: "FOLIO", value: (item) => item.folio },
+                    { key: "service", title: "TRÁMITE", value: (item) => serviceNames[item.serviceId] || item.serviceId, width: 220 },
+                    { key: "origin", title: "UNIDAD DE ORIGEN", value: (item) => unitNames[item.previousUnitId || ""] || "No disponible", width: 220 },
+                    { key: "destination", title: "UNIDAD DE DESTINO", value: (item) => unitNames[item.destinationUnitId || ""] || "No disponible", width: 220 },
+                    { key: "reason", title: "MOTIVO", value: (item) => item.reason || "Sin motivo", width: 240 },
+                    { key: "date", title: "CANALIZADA", value: (item) => new Date(item.resolvedAt || item.requestedAt).getTime(), width: 160, render: (item) => <Text>{new Date(item.resolvedAt || item.requestedAt).toLocaleDateString("es-MX")}</Text> },
+                  ]}
+                  renderActions={(item) => (
+                    <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${item.id}` as any)}>
+                      <Text>Ver detalles</Text>
+                    </Button>
+                  )}
+                />
+              </View>
+            </>
+          ) : (
+            <View className="gap-5">
+              {report.isLoading || units.isLoading || services.isLoading ? <ActivityIndicator color="#981646" /> : null}
+              <View className="grid grid-cols-4 gap-4">
+                {[
+                  { label: "Recibidas para revisión", value: reportItems.length, note: "Total de solicitudes canalizadas o pendientes" },
+                  { label: "Pendientes", value: pendingCount, note: "Esperan análisis del enlace" },
+                  { label: "Canalizadas", value: resolvedItems.length, note: "Enviadas a otra unidad" },
+                  { label: "Tiempo promedio", value: `${averageHours.toFixed(1)} h`, note: "Desde la solicitud hasta su canalización" },
+                ].map((metric) => (
+                  <View key={metric.label} className="rounded-2xl border border-border bg-card p-5">
+                    <Text className="text-sm text-muted-foreground">{metric.label}</Text>
+                    <Text className="mt-2 text-3xl font-bold">{metric.value}</Text>
+                    <Text className="mt-2 text-xs text-muted-foreground">{metric.note}</Text>
+                  </View>
+                ))}
+              </View>
+              <View className="grid grid-cols-2 gap-5">
+                <View className="rounded-2xl border border-border bg-card p-5">
+                  <Text className="text-lg font-bold">Unidades de origen</Text>
+                  <Text className="mt-1 text-sm text-muted-foreground">Unidades que marcaron solicitudes como no correspondientes.</Text>
+                  <RequestsBarChart data={originChart.slice(0, 8)} />
+                </View>
+                <View className="rounded-2xl border border-border bg-card p-5">
+                  <Text className="text-lg font-bold">Unidades de destino</Text>
+                  <Text className="mt-1 text-sm text-muted-foreground">Unidades que recibieron solicitudes después del análisis.</Text>
+                  <RequestsBarChart data={destinationChart.slice(0, 8)} />
+                </View>
+              </View>
+              <AdminDataTable
+                data={reportItems}
+                getRowId={(item) => item.id}
+                searchPlaceholder="Buscar folio, motivo, unidad o trámite..."
+                filterLabel="Todos los resultados"
+                filterOptions={[{ label: "Pendientes", value: "pending" }, { label: "Canalizadas", value: "resolved" }]}
+                getFilterValue={(item) => item.pending ? "pending" : "resolved"}
+                emptyMessage="Todavía no hay solicitudes enviadas a canalización."
+                columns={[
+                  { key: "folio", title: "FOLIO", value: (item) => item.folio },
+                  { key: "service", title: "TRÁMITE", value: (item) => serviceNames[item.serviceId] || item.serviceId, width: 220 },
+                  { key: "origin", title: "UNIDAD DE ORIGEN", value: (item) => unitNames[item.previousUnitId || ""] || "No disponible", width: 220 },
+                  { key: "destination", title: "DESTINO", value: (item) => item.pending ? "Pendiente" : unitNames[item.destinationUnitId || ""] || "No disponible", width: 220 },
+                  { key: "reason", title: "MOTIVO", value: (item) => item.reason || "Sin motivo", width: 260 },
+                  { key: "date", title: "FECHA", value: (item) => new Date(item.requestedAt).getTime(), width: 150, render: (item) => <Text>{new Date(item.requestedAt).toLocaleDateString("es-MX")}</Text> },
+                  { key: "result", title: "RESULTADO", value: (item) => item.pending ? "Pendiente" : "Canalizada", width: 130, render: (item) => <Text className={item.pending ? "font-semibold text-amber-700" : "font-semibold text-emerald-700"}>{item.pending ? "Pendiente" : "Canalizada"}</Text> },
+                ]}
+                renderActions={(item) => (
+                  <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${item.id}` as any)}>
+                    <Text>Ver detalles</Text>
+                  </Button>
+                )}
+              />
+            </View>
+          )}
+        </ScrollView>
       </View>
     </View>
   );
@@ -788,9 +1043,19 @@ function SecretaryDashboard() {
   const [section, setSection] = useState<SecretarySection>("resumen");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [eventFilter, setEventFilter] = useState("");
+  const [dashboardEventIds, setDashboardEventIds] = useState<string[]>([]);
+  const [serviceFilter, setServiceFilter] = useState("");
+  const [unitFilter, setUnitFilter] = useState("");
+  const [staffFilter, setStaffFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [exhibitionSearch, setExhibitionSearch] = useState("");
+  const [exhibitionEventId, setExhibitionEventId] = useState("");
   const requests = useQuery({
     queryKey: ["secretaria", "requests"],
     queryFn: requestsService.listAllAccessible,
+    refetchOnWindowFocus: true,
   });
   const services = useQuery({
     queryKey: ["secretaria", "services"],
@@ -820,17 +1085,30 @@ function SecretaryDashboard() {
   const filteredRequests = useMemo(
     () => (requests.data || []).filter((request) => {
       const time = new Date(request.requestedAt).getTime();
-      return time >= fromTime && time <= toTime;
+      const term = search.trim().toLocaleLowerCase("es-MX");
+      return time >= fromTime && time <= toTime
+        && (section === "resumen"
+          ? (!dashboardEventIds.length || Boolean(request.eventId && dashboardEventIds.includes(request.eventId)))
+          : (!eventFilter || request.eventId === eventFilter))
+        && (!serviceFilter || request.serviceId === serviceFilter)
+        && (!unitFilter || request.unitId === unitFilter)
+        && (!staffFilter || request.applicantUserId === staffFilter)
+        && (!statusFilter || request.status === statusFilter)
+        && (!term || request.folio.toLocaleLowerCase("es-MX").includes(term)
+          || Object.values(request.applicantData || {}).some((value) => String(value).toLocaleLowerCase("es-MX").includes(term)));
     }),
-    [requests.data, fromTime, toTime],
+    [requests.data, fromTime, toTime, eventFilter, dashboardEventIds, serviceFilter, unitFilter, staffFilter, statusFilter, search, section],
   );
   const filteredEvents = useMemo(
     () => (events.data || []).filter((event) => {
       const startsAt = new Date(event.startsAt).getTime();
       const endsAt = new Date(event.endsAt || event.startsAt).getTime();
-      return startsAt <= toTime && endsAt >= fromTime;
+      return startsAt <= toTime && endsAt >= fromTime
+        && (section === "resumen"
+          ? (!dashboardEventIds.length || dashboardEventIds.includes(event.id))
+          : (!eventFilter || event.id === eventFilter));
     }),
-    [events.data, fromTime, toTime],
+    [events.data, fromTime, toTime, eventFilter, dashboardEventIds, section],
   );
   const serviceNames = useMemo(
     () => Object.fromEntries((services.data || []).map((service) => [service.id, service.name])),
@@ -874,6 +1152,55 @@ function SecretaryDashboard() {
       .map((service) => ({ name: service.name, count: counts.get(service.id) || 0 }))
       .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
   }, [filteredRequests, services.data]);
+  const unitRanking = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of filteredRequests)
+      counts.set(request.unitId, (counts.get(request.unitId) || 0) + 1);
+    return (units.data || [])
+      .map((unit) => ({ name: unit.name, count: counts.get(unit.id) || 0 }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }, [filteredRequests, units.data]);
+  const dailyChart = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of [...filteredRequests].reverse()) {
+      const label = new Date(request.requestedAt).toLocaleDateString("es-MX", { day: "2-digit", month: "short" });
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()].slice(-14).map(([label, value]) => ({ label, value }));
+  }, [filteredRequests]);
+  const exhibitionEvents = useMemo(() => {
+    const term = exhibitionSearch.trim().toLocaleLowerCase("es-MX");
+    return (events.data || []).filter((event) => !term
+      || event.name.toLocaleLowerCase("es-MX").includes(term)
+      || event.municipality.toLocaleLowerCase("es-MX").includes(term)
+      || event.locality.toLocaleLowerCase("es-MX").includes(term)
+      || event.folioPrefix.toLocaleLowerCase("es-MX").includes(term));
+  }, [events.data, exhibitionSearch]);
+  const exhibitionEvent = (events.data || []).find((event) => event.id === exhibitionEventId);
+  const exhibitionRequests = useMemo(
+    () => (requests.data || []).filter((request) => request.eventId === exhibitionEventId),
+    [requests.data, exhibitionEventId],
+  );
+  const exhibitionStatus = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) counts.set(request.status, (counts.get(request.status) || 0) + 1);
+    return [...counts.entries()].map(([status, value]) => ({ label: REQUEST_STATUS_LABELS[status] || status, value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests]);
+  const exhibitionServices = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) counts.set(request.serviceId, (counts.get(request.serviceId) || 0) + 1);
+    return [...counts.entries()].map(([id, value]) => ({ label: serviceNames[id] || "Trámite no disponible", value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, serviceNames]);
+  const exhibitionUnits = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) counts.set(request.unitId, (counts.get(request.unitId) || 0) + 1);
+    return [...counts.entries()].map(([id, value]) => ({ label: unitNames[id] || "Unidad no disponible", value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, unitNames]);
+  const exhibitionStaff = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) counts.set(request.applicantUserId, (counts.get(request.applicantUserId) || 0) + 1);
+    return [...counts.entries()].map(([id, value]) => ({ id, label: staffNames[id] || "Capturista no identificado", value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, staffNames]);
   const statusChart = useMemo(() => {
     const counts = new Map<string, number>();
     for (const request of filteredRequests)
@@ -930,10 +1257,22 @@ function SecretaryDashboard() {
           </Text>
         </View>
         <View className="gap-2">
+          <Pressable
+            onPress={() => router.push("/home" as any)}
+            className="mb-2 flex-row items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 hover:bg-primary/10"
+          >
+            <Monicon name="ci:plus-circle" size={20} color="#981646" />
+            <Text className="font-semibold text-primary">Nueva solicitud prioritaria</Text>
+          </Pressable>
           {secretaryNav.map((item) => (
             <Pressable
               key={item.key}
-              onPress={() => setSection(item.key)}
+              onPress={() => {
+                setSection(item.key);
+                setFrom(""); setTo(""); setEventFilter(""); setServiceFilter("");
+                setDashboardEventIds([]);
+                setUnitFilter(""); setStaffFilter(""); setStatusFilter(""); setSearch("");
+              }}
               className={`flex-row items-center gap-3 rounded-xl px-4 py-3 ${section === item.key ? "bg-primary" : "hover:bg-muted"}`}
             >
               <Monicon
@@ -946,18 +1285,11 @@ function SecretaryDashboard() {
               </Text>
             </Pressable>
           ))}
-          <Pressable
-            onPress={() => router.push("/home" as any)}
-            className="mt-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
-          >
-            <Text className="font-semibold text-primary">＋ Nueva captura</Text>
-            <Text className="mt-1 text-xs text-muted-foreground">Registrar solicitud asistida</Text>
-          </Pressable>
         </View>
         <View className="mt-auto border-t border-border pt-5">
           <Text className="font-semibold">{user?.nombre}</Text>
           <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-            Secretaría · Consulta general
+            Rol: Secretaría · Consulta general
           </Text>
           <Button variant="outline" onPress={logout}><Text>Cerrar sesión</Text></Button>
         </View>
@@ -980,113 +1312,232 @@ function SecretaryDashboard() {
           ) : null}
         </View>
         <ScrollView contentContainerStyle={{ padding: 32, gap: 24 }}>
-        <View className="flex-row flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-5">
-          <View className="gap-2"><Text className="text-sm font-semibold">Desde</Text><input type="date" value={from} onChange={(e) => setFrom(e.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2" /></View>
-          <View className="gap-2"><Text className="text-sm font-semibold">Hasta</Text><input type="date" value={to} onChange={(e) => setTo(e.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2" /></View>
-          <Button variant="outline" onPress={() => { setFrom(""); setTo(""); }}><Text>Limpiar filtro</Text></Button>
-          <Text className="ml-auto text-xs font-medium text-muted-foreground">{periodDescription}</Text>
-        </View>
-        {loading ? <ActivityIndicator color="#981646" /> : null}
-        {section === "resumen" ? <>
-          <View className="flex-row flex-wrap gap-4">
-            <Metric label="Solicitudes registradas" value={filteredRequests.length} note="En el periodo seleccionado" />
-            <Metric label="Eventos realizados" value={filteredEvents.length} note="Ubicados en el mapa" />
-            <Metric label="Con cambio de estatus" value={changed} note="Solicitudes que ya recibieron atención" />
-            <Metric label="Concluidas" value={concluded} note={`${beneficiaries} personas beneficiarias`} />
-            <Metric label="No continuaron" value={didNotContinue} note="Rechazadas o canceladas con motivo" />
-            <Metric label="Prioridad al reabrir" value={priority} note="Registradas fuera de convocatoria" />
-          </View>
-          <View className="grid grid-cols-2 gap-4">
-            <View className="rounded-2xl border border-border bg-card p-5">
-              <Text className="text-xl font-bold">Solicitudes por estatus</Text>
-              <Text className="mt-1 text-sm text-muted-foreground">
-                Distribución durante el periodo seleccionado.
-              </Text>
-              <StatusPieChart data={statusChart} />
+          {section === "solicitudes" ? <View className="flex-row flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-5">
+            <View className="min-w-80 gap-2"><Text className="text-sm font-semibold">Evento</Text><select value={eventFilter} onChange={(event) => setEventFilter(event.currentTarget.value)} className="w-full max-w-xl rounded-lg border border-zinc-300 bg-transparent px-3 py-2"><option value="">Todos los eventos</option>{(events.data || []).map((item) => <option key={item.id} value={item.id}>{item.name} · {new Date(item.startsAt).toLocaleDateString("es-MX")}</option>)}</select></View>
+            <View className="min-w-60 flex-1 gap-2"><Text className="text-sm font-semibold">Buscar por folio</Text><Input value={search} onChangeText={setSearch} placeholder="Ej. CENTRO-2026-001" autoCapitalize="characters" /></View>
+            <Button variant="outline" disabled={!eventFilter && !search} onPress={() => { setEventFilter(""); setSearch(""); }}><Text>Limpiar filtros</Text></Button>
+            <Text className="w-full text-xs font-medium text-muted-foreground">{eventFilter ? `Evento: ${eventNames[eventFilter] || eventFilter}.` : "Todos los eventos."} · {filteredRequests.length} resultados.</Text>
+          </View> : null}
+          {loading ? <ActivityIndicator color="#981646" /> : null}
+          {section === "resumen" ? <>
+            <View className="relative z-[1000] overflow-visible rounded-2xl border border-border bg-card p-5">
+              <View className="mb-4"><Text className="text-lg font-bold">Filtrar dashboard</Text><Text className="mt-1 text-sm text-muted-foreground">Consulta por rango de fechas o por un evento específico. Los filtros no se pueden combinar.</Text></View>
+              <View className="relative z-[1001] flex-row flex-wrap items-end gap-3 overflow-visible">
+                <View className="gap-2"><Text className="text-sm font-semibold">Desde</Text><input type="date" value={from} disabled={Boolean(dashboardEventIds.length)} onChange={(event) => { setDashboardEventIds([]); setFrom(event.currentTarget.value); }} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40" /></View>
+                <View className="gap-2"><Text className="text-sm font-semibold">Hasta</Text><input type="date" value={to} disabled={Boolean(dashboardEventIds.length)} onChange={(event) => { setDashboardEventIds([]); setTo(event.currentTarget.value); }} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40" /></View>
+                <EventMultiSelect events={(events.data || []) as AttentionEvent[]} value={dashboardEventIds} disabled={Boolean(from || to)} onChange={(selected) => { setFrom(""); setTo(""); setDashboardEventIds(selected); }} />
+                <Button variant="outline" disabled={!from && !to && !dashboardEventIds.length} onPress={() => { setFrom(""); setTo(""); setDashboardEventIds([]); }}><Text>Restablecer filtros</Text></Button>
+              </View>
+              <Text className="mt-4 text-xs font-medium text-muted-foreground">{dashboardEventIds.length ? `${dashboardEventIds.length} eventos seleccionados: ${dashboardEventIds.map((id) => eventNames[id] || id).join(", ")}.` : periodDescription} · {filteredRequests.length} solicitudes.</Text>
+            </View>
+            <View className="flex-row flex-wrap gap-4">
+              <Metric label="Solicitudes registradas" value={filteredRequests.length} note={from || to || dashboardEventIds.length ? "Resultado del filtro activo" : "Historial general disponible"} />
+              <Metric label="Eventos registrados" value={filteredEvents.length} note={dashboardEventIds.length ? "Eventos seleccionados" : from || to ? "Eventos dentro del periodo" : "Total de jornadas"} />
+              <Metric label="Con cambio de estatus" value={changed} note="Solicitudes que ya recibieron atención" />
+              <Metric label="Concluidas" value={concluded} note={`${beneficiaries} personas beneficiarias`} />
+              <Metric label="Avance de atención" value={`${filteredRequests.length ? Math.round((concluded / filteredRequests.length) * 100) : 0}%`} note="Solicitudes concluidas" />
+              <Metric label="No continuaron" value={didNotContinue} note="Rechazadas o canceladas con motivo" />
+              <Metric label="Solicitudes prioritarias" value={priority} note="Marcadas para atención prioritaria" />
+            </View>
+            <View className="grid grid-cols-2 gap-4">
+              <View className="rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Solicitudes por estatus</Text>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  Distribución durante el periodo seleccionado.
+                </Text>
+                <StatusPieChart data={statusChart} />
+              </View>
+              <View className="rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Trámites más solicitados</Text>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  Comparativo de los seis trámites con mayor demanda.
+                </Text>
+                <RequestsBarChart
+                  data={ranking.slice(0, 6).map((item) => ({
+                    label: item.name,
+                    value: item.count,
+                  }))}
+                />
+              </View>
+              <View className="col-span-2 rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Solicitudes por evento</Text>
+                <Text className="mt-1 text-sm text-muted-foreground">
+                  Actividad de las jornadas incluidas en el periodo.
+                </Text>
+                <RequestsBarChart data={eventChart} />
+              </View>
+              <View className="rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Solicitudes por unidad</Text>
+                <Text className="mt-1 text-sm text-muted-foreground">Carga recibida por unidad administrativa.</Text>
+                <RequestsBarChart data={unitRanking.slice(0, 8).map((item) => ({ label: item.name, value: item.count }))} />
+              </View>
+              <View className="rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Actividad reciente</Text>
+                <Text className="mt-1 text-sm text-muted-foreground">Capturas por día en el periodo seleccionado.</Text>
+                <RequestsBarChart data={dailyChart} />
+              </View>
             </View>
             <View className="rounded-2xl border border-border bg-card p-5">
-              <Text className="text-xl font-bold">Trámites más solicitados</Text>
-              <Text className="mt-1 text-sm text-muted-foreground">
-                Comparativo de los seis trámites con mayor demanda.
-              </Text>
-              <RequestsBarChart
-                data={ranking.slice(0, 6).map((item) => ({
-                  label: item.name,
-                  value: item.count,
-                }))}
-              />
+              <Text className="text-xl font-bold">Productividad de capturistas</Text>
+              <Text className="mb-4 mt-1 text-sm text-muted-foreground">Solicitudes registradas durante el periodo seleccionado.</Text>
+              <View className="gap-2">
+                {capturistaRanking.map((capturista, index) => (
+                  <View key={capturista.id} className="flex-row items-center rounded-xl bg-muted/50 p-3">
+                    <Text className="w-10 font-bold text-primary">#{index + 1}</Text>
+                    <Text className="flex-1 font-semibold">{capturista.name}</Text>
+                    <Text>{capturista.count} solicitudes</Text>
+                  </View>
+                ))}
+                {!capturistaRanking.length ? <Text className="text-muted-foreground">Sin capturas en este periodo.</Text> : null}
+              </View>
             </View>
-            <View className="col-span-2 rounded-2xl border border-border bg-card p-5">
-              <Text className="text-xl font-bold">Solicitudes por evento</Text>
-              <Text className="mt-1 text-sm text-muted-foreground">
-                Actividad de las jornadas incluidas en el periodo.
-              </Text>
-              <RequestsBarChart data={eventChart} />
+            <View className="flex-row flex-wrap gap-4">
+              <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5">
+                <Text className="text-sm text-muted-foreground">Trámite más solicitado</Text>
+                <Text className="mt-2 text-xl font-bold">{ranking[0]?.name || "Sin datos"}</Text>
+                <Text className="mt-1 text-primary">{ranking[0]?.count || 0} solicitudes</Text>
+              </View>
+              <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5">
+                <Text className="text-sm text-muted-foreground">Trámite menos solicitado</Text>
+                <Text className="mt-2 text-xl font-bold">{ranking.at(-1)?.name || "Sin datos"}</Text>
+                <Text className="mt-1 text-primary">{ranking.at(-1)?.count || 0} solicitudes</Text>
+              </View>
+              <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5"><Text className="text-sm text-muted-foreground">Unidad con más solicitudes</Text><Text className="mt-2 text-xl font-bold">{unitRanking[0]?.name || "Sin datos"}</Text><Text className="mt-1 text-primary">{unitRanking[0]?.count || 0} solicitudes</Text></View>
+              <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5"><Text className="text-sm text-muted-foreground">Unidad con menos solicitudes</Text><Text className="mt-2 text-xl font-bold">{unitRanking.at(-1)?.name || "Sin datos"}</Text><Text className="mt-1 text-primary">{unitRanking.at(-1)?.count || 0} solicitudes</Text></View>
             </View>
-          </View>
-          <View className="rounded-2xl border border-border bg-card p-5">
-            <Text className="text-xl font-bold">Productividad de capturistas</Text>
-            <Text className="mb-4 mt-1 text-sm text-muted-foreground">Solicitudes registradas durante el periodo seleccionado.</Text>
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <View className="mb-4 flex-row items-end justify-between gap-4">
+                <View><Text className="text-xl font-bold">Solicitudes del resultado</Text><Text className="mt-1 text-sm text-muted-foreground">Listado de solicitudes que coinciden con el filtro aplicado al Dashboard.</Text></View>
+                <Text className="font-semibold text-primary">{filteredRequests.length} solicitudes</Text>
+              </View>
+              <div className="max-h-[480px] overflow-auto rounded-xl border border-border">
+                <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-zinc-100">
+                    <tr>{['Folio', 'Fecha', 'Evento', 'Trámite', 'Unidad', 'Capturista', 'Estatus', 'Acciones'].map((label) => <th key={label} className="whitespace-nowrap border-b border-border px-4 py-3 text-xs font-bold uppercase text-zinc-500">{label}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {filteredRequests.map((request) => (
+                      <tr key={request.id} className="border-b border-border last:border-b-0 hover:bg-zinc-50">
+                        <td className="whitespace-nowrap px-4 py-3 font-semibold text-zinc-900">{request.folio}</td>
+                        <td className="whitespace-nowrap px-4 py-3">{new Date(request.requestedAt).toLocaleDateString("es-MX")}</td>
+                        <td className="max-w-56 px-4 py-3">{request.eventId ? eventNames[request.eventId] || request.eventFolio || "Evento no disponible" : "Fuera de evento"}</td>
+                        <td className="max-w-56 px-4 py-3">{serviceNames[request.serviceId] || "Trámite no disponible"}</td>
+                        <td className="max-w-56 px-4 py-3">{unitNames[request.unitId] || "Unidad no disponible"}</td>
+                        <td className="max-w-48 px-4 py-3">{staffNames[request.applicantUserId] || "No identificado"}</td>
+                        <td className="whitespace-nowrap px-4 py-3"><span className="rounded-full bg-primary/10 px-3 py-1 font-semibold text-primary">{REQUEST_STATUS_LABELS[request.status] || request.status}</span></td>
+                        <td className="px-4 py-3"><button type="button" onClick={() => router.push(`/admin/solicitud/${request.id}` as any)} className="rounded-lg border border-primary/30 px-3 py-2 font-semibold text-primary hover:bg-primary/10">Ver expediente</button></td>
+                      </tr>
+                    ))}
+                    {!filteredRequests.length ? <tr><td colSpan={8} className="px-4 py-10 text-center text-zinc-500">No hay solicitudes que coincidan con el filtro seleccionado.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+            </View>
+          </> : null}
+          {section === "eventos" ? <>
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <Text className="mb-1 text-xl font-bold">Eventos por municipio de Tabasco</Text>
+              <Text className="mb-4 text-sm text-muted-foreground">Selecciona un municipio para consultar cuántos eventos y solicitudes se registraron. La intensidad del color representa la actividad.</Text>
+              <Suspense fallback={<ActivityIndicator color="#981646" />}><MunicipalEventsMap events={(events.data || []) as AttentionEvent[]} requestCounts={eventRequestCountRecord} /></Suspense>
+            </View>
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <Text className="mb-4 text-xl font-bold">Eventos del periodo</Text>
+              <View className="gap-2">
+                {filteredEvents.map((event) => (
+                  <View key={event.id} className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-3 rounded-xl bg-muted/50 p-3">
+                    <View><Text className="font-semibold">{event.name}</Text><Text className="text-xs text-muted-foreground">{event.folioPrefix} · {eventRequestCounts.get(event.id) || 0} solicitudes</Text></View>
+                    <Text>{event.locality}, {event.municipality}</Text>
+                    <Text>{formatEventDateTime(event.startsAt)}</Text>
+                    <Text className={getEventStatus(event) === "Activo" ? "text-green-700" : "text-muted-foreground"}>{getEventStatus(event)}</Text>
+                  </View>
+                ))}
+                {!filteredEvents.length ? <Text className="py-6 text-center text-muted-foreground">No hay eventos en el rango seleccionado.</Text> : null}
+              </View>
+            </View>
+          </> : null}
+          {section === "reporte" ? <>
+            <View className="rounded-2xl border border-border bg-card p-5">
+              <Text className="text-xl font-bold">Seleccionar evento para reporte</Text>
+              <Text className="mb-4 mt-1 text-sm text-muted-foreground">Busca por nombre, municipio, localidad o folio para consultar el reporte detallado de esa jornada.</Text>
+              <Input value={exhibitionSearch} onChangeText={setExhibitionSearch} placeholder="Buscar evento..." />
+              <View className="mt-3 max-h-52 gap-2 overflow-y-auto">
+                {exhibitionEvents.map((event) => (
+                  <Pressable key={event.id} onPress={() => setExhibitionEventId(event.id)} className={`grid grid-cols-[1.5fr_1fr_auto] items-center gap-3 rounded-xl border p-3 ${exhibitionEventId === event.id ? "border-primary bg-primary/10" : "border-border bg-muted/30"}`}>
+                    <View><Text className="font-semibold">{event.name}</Text><Text className="text-xs text-muted-foreground">{event.folioPrefix} · {event.locality}, {event.municipality}</Text></View>
+                    <Text className="text-sm">{formatEventDateTime(event.startsAt)}</Text>
+                    <Text className="font-semibold text-primary">{(requests.data || []).filter((request) => request.eventId === event.id).length} solicitudes</Text>
+                  </Pressable>
+                ))}
+                {!exhibitionEvents.length ? <Text className="py-5 text-center text-muted-foreground">No se encontraron eventos.</Text> : null}
+              </View>
+            </View>
+            {exhibitionEvent ? <>
+              <View className="overflow-hidden rounded-3xl border border-primary/20 bg-card p-6 shadow-sm">
+                <View className="mb-5 flex-row items-start justify-between gap-4">
+                  <View><Text className="text-xs font-bold uppercase tracking-wider text-primary">Reporte detallado del evento</Text><Text className="mt-1 text-3xl font-bold">{exhibitionEvent.name}</Text><Text className="mt-2 text-muted-foreground">Resultados territoriales y operativos de la jornada</Text></View>
+                  <Text className={`rounded-full px-4 py-2 text-sm font-semibold ${getEventStatus(exhibitionEvent) === "Activo" ? "bg-green-100 text-green-800" : "bg-muted text-muted-foreground"}`}>{getEventStatus(exhibitionEvent)}</Text>
+                </View>
+                <Suspense fallback={<ActivityIndicator color="#981646" />}>
+                  <SecretaryEventsMap
+                    events={[exhibitionEvent] as AttentionEvent[]}
+                    requestCounts={{ [exhibitionEvent.id]: exhibitionRequests.length }}
+                    height={680}
+                    autoSelect
+                    immersive
+                    fullscreenContent={<View className="mx-auto w-full max-w-7xl gap-6">
+                      <View><Text className="text-xs font-bold uppercase tracking-wider text-primary">Resultados de la jornada</Text><Text className="mt-1 text-3xl font-bold">Todo lo realizado en {exhibitionEvent.name}</Text><Text className="mt-2 text-muted-foreground">Desplázate para consultar indicadores, gráficas y participación del personal.</Text></View>
+                      <View className="flex-row flex-wrap gap-4">
+                        <Metric label="Solicitudes generadas" value={exhibitionRequests.length} note="Total del evento" />
+                        <Metric label="Trámites atendidos" value={exhibitionServices.length} note="Tipos con actividad" />
+                        <Metric label="Unidades participantes" value={exhibitionUnits.length} note="Áreas involucradas" />
+                        <Metric label="Capturistas" value={exhibitionStaff.length} note="Personal participante" />
+                      </View>
+                      <View className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Solicitudes por estatus</Text><StatusPieChart data={exhibitionStatus} /></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Trámites solicitados</Text><RequestsBarChart data={exhibitionServices.slice(0, 8)} /></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Participación de unidades</Text><RequestsBarChart data={exhibitionUnits.slice(0, 8)} /></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="mb-4 text-xl font-bold">Rendimiento de capturistas</Text><View className="gap-2">{exhibitionStaff.map((member, index) => <View key={member.id} className="flex-row items-center rounded-xl bg-muted/50 p-3"><Text className="w-10 font-bold text-primary">#{index + 1}</Text><Text className="flex-1 font-semibold">{member.label}</Text><Text>{member.value} solicitudes</Text></View>)}{!exhibitionStaff.length ? <Text className="text-muted-foreground">Sin capturas registradas.</Text> : null}</View></View>
+                      </View>
+                      <View className="rounded-2xl border border-border bg-card p-5"><Text className="mb-4 text-xl font-bold">Solicitudes del evento</Text><View className="gap-2">{exhibitionRequests.map((request) => <View key={request.id} className="grid grid-cols-[1fr_1.5fr_1.5fr_1fr] gap-3 rounded-xl bg-muted/50 p-3"><Text className="font-semibold">{request.folio}</Text><Text>{serviceNames[request.serviceId] || "Trámite no disponible"}</Text><Text>{unitNames[request.unitId] || "Unidad no disponible"}</Text><Text>{REQUEST_STATUS_LABELS[request.status] || request.status}</Text></View>)}</View></View>
+                    </View>}
+                  />
+                </Suspense>
+              </View>
+              <View className="flex-row flex-wrap gap-4">
+                <Metric label="Solicitudes generadas" value={exhibitionRequests.length} note="Total registrado en el evento" />
+                <Metric label="Trámites solicitados" value={exhibitionServices.length} note="Tipos de trámite con actividad" />
+                <Metric label="Unidades participantes" value={exhibitionUnits.length} note="Unidades que recibieron solicitudes" />
+                <Metric label="Capturistas participantes" value={exhibitionStaff.length} note="Personal con registros" />
+                <Metric label="Solicitudes concluidas" value={exhibitionRequests.filter((item) => item.status === "concluida").length} note={`${exhibitionRequests.length ? Math.round((exhibitionRequests.filter((item) => item.status === "concluida").length / exhibitionRequests.length) * 100) : 0}% de avance`} />
+              </View>
+              <View className="grid grid-cols-2 gap-4">
+                <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Resultados por estatus</Text><Text className="mt-1 text-sm text-muted-foreground">Situación actual de las solicitudes del evento.</Text><StatusPieChart data={exhibitionStatus} /></View>
+                <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Trámites atendidos</Text><Text className="mt-1 text-sm text-muted-foreground">Demanda registrada durante el evento.</Text><RequestsBarChart data={exhibitionServices.slice(0, 8)} /></View>
+                <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Participación de unidades</Text><Text className="mt-1 text-sm text-muted-foreground">Solicitudes canalizadas a cada unidad.</Text><RequestsBarChart data={exhibitionUnits.slice(0, 8)} /></View>
+                <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Trabajo de capturistas</Text><Text className="mb-4 mt-1 text-sm text-muted-foreground">Registros realizados en esta jornada.</Text><View className="gap-2">{exhibitionStaff.map((member, index) => <View key={member.id} className="flex-row items-center rounded-xl bg-muted/50 p-3"><Text className="w-10 font-bold text-primary">#{index + 1}</Text><Text className="flex-1 font-semibold">{member.label}</Text><Text>{member.value} solicitudes</Text></View>)}{!exhibitionStaff.length ? <Text className="text-muted-foreground">Sin capturas registradas.</Text> : null}</View></View>
+              </View>
+              <View className="rounded-2xl border border-border bg-card p-5">
+                <Text className="text-xl font-bold">Solicitudes relacionadas</Text>
+                <Text className="mb-4 mt-1 text-sm text-muted-foreground">Expedientes generados exclusivamente durante este evento.</Text>
+                <View className="gap-2">{exhibitionRequests.map((request) => <Pressable key={request.id} onPress={() => router.push(`/admin/solicitud/${request.id}` as any)} className="grid grid-cols-[1fr_1.5fr_1.5fr_1fr_auto] items-center gap-3 rounded-xl bg-muted/50 p-3"><View><Text className="font-semibold">{request.folio}</Text><Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleString("es-MX")}</Text></View><Text>{serviceNames[request.serviceId] || "Trámite no disponible"}</Text><Text>{unitNames[request.unitId] || "Unidad no disponible"}</Text><Text>{REQUEST_STATUS_LABELS[request.status] || request.status}</Text><Text className="font-semibold text-primary">Ver expediente →</Text></Pressable>)}{!exhibitionRequests.length ? <Text className="py-6 text-center text-muted-foreground">Este evento todavía no tiene solicitudes registradas.</Text> : null}</View>
+              </View>
+            </> : <View className="grid min-h-80 place-content-center rounded-2xl border border-dashed border-border bg-card text-center"><Text className="text-xl font-bold">Selecciona un evento</Text><Text className="mt-2 text-muted-foreground">Aquí aparecerá el reporte completo de la jornada.</Text></View>}
+          </> : null}
+          {section === "solicitudes" ? <View className="rounded-2xl border border-border bg-card p-5">
+            <Text className="mb-4 text-xl font-bold">Detalle de solicitudes</Text>
             <View className="gap-2">
-              {capturistaRanking.map((capturista, index) => (
-                <View key={capturista.id} className="flex-row items-center rounded-xl bg-muted/50 p-3">
-                  <Text className="w-10 font-bold text-primary">#{index + 1}</Text>
-                  <Text className="flex-1 font-semibold">{capturista.name}</Text>
-                  <Text>{capturista.count} solicitudes</Text>
+              {filteredRequests.map((request) => (
+                <View key={request.id} className="grid grid-cols-[1fr_1.5fr_1.5fr_1fr_auto] items-center gap-3 rounded-xl bg-muted/50 p-3">
+                  <View><Text className="font-semibold">{request.folio}</Text><Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleDateString("es-MX")}</Text></View>
+                  <Text>{serviceNames[request.serviceId] || "Trámite no disponible"}</Text>
+                  <Text>{unitNames[request.unitId] || "Unidad no disponible"}</Text>
+                  <Text className="capitalize">{request.status.replaceAll("_", " ")}</Text>
+                  <Pressable onPress={() => router.push(`/admin/solicitud/${request.id}` as any)} className="rounded-lg border border-primary/30 px-3 py-2"><Text className="font-semibold text-primary">Ver seguimiento</Text></Pressable>
                 </View>
               ))}
-              {!capturistaRanking.length ? <Text className="text-muted-foreground">Sin capturas en este periodo.</Text> : null}
+              {!filteredRequests.length ? <Text className="py-6 text-center text-muted-foreground">No hay solicitudes en el rango seleccionado.</Text> : null}
             </View>
-          </View>
-          <View className="flex-row flex-wrap gap-4">
-            <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5">
-              <Text className="text-sm text-muted-foreground">Trámite más solicitado</Text>
-              <Text className="mt-2 text-xl font-bold">{ranking[0]?.name || "Sin datos"}</Text>
-              <Text className="mt-1 text-primary">{ranking[0]?.count || 0} solicitudes</Text>
-            </View>
-            <View className="min-w-72 flex-1 rounded-2xl border border-border bg-card p-5">
-              <Text className="text-sm text-muted-foreground">Trámite menos solicitado</Text>
-              <Text className="mt-2 text-xl font-bold">{ranking.at(-1)?.name || "Sin datos"}</Text>
-              <Text className="mt-1 text-primary">{ranking.at(-1)?.count || 0} solicitudes</Text>
-            </View>
-          </View>
-        </> : null}
-        {section === "eventos" ? <>
-          <View className="rounded-2xl border border-border bg-card p-5">
-            <Text className="mb-1 text-xl font-bold">Mapa de eventos en Tabasco</Text>
-            <Text className="mb-4 text-sm text-muted-foreground">Selecciona un marcador para consultar lugar, fecha y folio.</Text>
-            <Suspense fallback={<ActivityIndicator color="#981646" />}><SecretaryEventsMap events={filteredEvents as AttentionEvent[]} requestCounts={eventRequestCountRecord} /></Suspense>
-          </View>
-          <View className="rounded-2xl border border-border bg-card p-5">
-          <Text className="mb-4 text-xl font-bold">Eventos del periodo</Text>
-          <View className="gap-2">
-            {filteredEvents.map((event) => (
-              <View key={event.id} className="grid grid-cols-[1.5fr_1fr_1fr_auto] items-center gap-3 rounded-xl bg-muted/50 p-3">
-                <View><Text className="font-semibold">{event.name}</Text><Text className="text-xs text-muted-foreground">{event.folioPrefix} · {eventRequestCounts.get(event.id) || 0} solicitudes</Text></View>
-                <Text>{event.locality}, {event.municipality}</Text>
-                <Text>{formatEventDateTime(event.startsAt)}</Text>
-                <Text className={getEventStatus(event) === "Activo" ? "text-green-700" : "text-muted-foreground"}>{getEventStatus(event)}</Text>
-              </View>
-            ))}
-            {!filteredEvents.length ? <Text className="py-6 text-center text-muted-foreground">No hay eventos en el rango seleccionado.</Text> : null}
-          </View>
-          </View>
-        </> : null}
-        {section === "solicitudes" ? <View className="rounded-2xl border border-border bg-card p-5">
-          <Text className="mb-4 text-xl font-bold">Detalle de solicitudes</Text>
-          <View className="gap-2">
-            {filteredRequests.map((request) => (
-              <View key={request.id} className="grid grid-cols-[1fr_1.5fr_1.5fr_1fr_auto] items-center gap-3 rounded-xl bg-muted/50 p-3">
-                <View><Text className="font-semibold">{request.folio}</Text><Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleDateString("es-MX")}</Text></View>
-                <Text>{serviceNames[request.serviceId] || "Trámite no disponible"}</Text>
-                <Text>{unitNames[request.unitId] || "Unidad no disponible"}</Text>
-                <Text className="capitalize">{request.status.replaceAll("_", " ")}</Text>
-                <Text className={request.status === "enviada" ? "text-muted-foreground" : "text-green-700"}>{request.status === "enviada" ? "Sin cambio" : "Modificado"}</Text>
-              </View>
-            ))}
-            {!filteredRequests.length ? <Text className="py-6 text-center text-muted-foreground">No hay solicitudes en el rango seleccionado.</Text> : null}
-          </View>
-        </View> : null}
+          </View> : null}
         </ScrollView>
       </View>
     </View>
@@ -1122,7 +1573,7 @@ function SuperAdminDashboard() {
     email: string;
     password: string;
     unitId: string;
-    role: "secretaria" | "enlace" | "gestor" | "capturista";
+    role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista";
     active: boolean;
   }>({ id: "", name: "", email: "", password: "", unitId: "", role: "capturista", active: true });
   const [eventForm, setEventForm] = useState<AttentionEventInput>(EMPTY_EVENT);
@@ -1131,9 +1582,6 @@ function SuperAdminDashboard() {
   >([]);
   const [ineAnalysisEnabled, setIneAnalysisEnabled] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [solicitudesEventFilter, setSolicitudesEventFilter] =
-    useState<string>("");
-
   const units = useQuery({
     queryKey: ["admin", "units"],
     queryFn: adminService.listUnits,
@@ -1149,6 +1597,7 @@ function SuperAdminDashboard() {
   const requests = useQuery({
     queryKey: ["admin", "requests"],
     queryFn: requestsService.listAccessible,
+    refetchOnWindowFocus: true,
   });
   const events = useQuery({
     queryKey: ["admin", "events"],
@@ -1227,6 +1676,11 @@ function SuperAdminDashboard() {
       : adminService.createStaffUser(invite),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["admin", "profiles"] });
+      setNotice(
+        invite.id && invite.password
+          ? "Usuario actualizado y contraseña restablecida correctamente."
+          : "Usuario guardado y relacionado correctamente.",
+      );
       setUserModal(false);
       setInvite({
         id: "",
@@ -1237,7 +1691,6 @@ function SuperAdminDashboard() {
         role: "capturista",
         active: true,
       });
-      setNotice("Usuario guardado y relacionado correctamente.");
     },
     onError: (error: Error) => setNotice(error.message),
   });
@@ -1327,12 +1780,12 @@ function SuperAdminDashboard() {
         key: field.key || `pregunta_${Date.now()}_${index + 1}`,
         options:
           field.type === "select" &&
-          `${field.key} ${field.label}`
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .toLowerCase()
-            .includes("municipio") &&
-          !field.options?.length
+            `${field.key} ${field.label}`
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase()
+              .includes("municipio") &&
+            !field.options?.length
             ? [...TABASCO_MUNICIPALITIES]
             : field.options,
       })),
@@ -1432,7 +1885,7 @@ function SuperAdminDashboard() {
         <View className="mt-auto border-t border-border pt-5">
           <Text className="font-semibold">{user?.nombre}</Text>
           <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-            Superadministrador
+            Rol: Superadministrador
           </Text>
           <Button variant="outline" onPress={logout}>
             <Text>Cerrar sesión</Text>
@@ -1661,7 +2114,13 @@ function SuperAdminDashboard() {
                                 setGlobalFieldsDraft((current) =>
                                   current.map((item, itemIndex) =>
                                     itemIndex === index
-                                      ? { ...item, type }
+                                      ? {
+                                        ...item,
+                                        type,
+                                        ...(type === "file" && !item.fileType
+                                          ? { fileType: "any" as const }
+                                          : {}),
+                                      }
                                       : item,
                                   ),
                                 );
@@ -1704,8 +2163,41 @@ function SuperAdminDashboard() {
                             placeholder="Indicación para responder"
                           />
                         </View>
+                        {field.type === "file" ? (
+                          <View className="gap-2 rounded-xl border border-border bg-muted/40 p-4">
+                            <Text className="text-sm font-semibold">
+                              Tipo de archivo permitido
+                            </Text>
+                            <select
+                              value={field.fileType || "any"}
+                              onChange={(event) => {
+                                const fileType = event.currentTarget.value as ServiceFormField["fileType"];
+                                setGlobalFieldsDraft((current) =>
+                                  current.map((item, itemIndex) =>
+                                    itemIndex === index ? { ...item, fileType } : item,
+                                  ),
+                                );
+                              }}
+                              style={{
+                                minHeight: 40,
+                                border: "1px solid #d4d4d8",
+                                borderRadius: 8,
+                                padding: "8px 12px",
+                                background: "transparent",
+                                color: "inherit",
+                              }}
+                            >
+                              <option value="any">Documentos e imágenes</option>
+                              <option value="document">Solo documentos (PDF, Word y Excel)</option>
+                              <option value="image">Solo imágenes (JPG y PNG)</option>
+                            </select>
+                            <Text className="text-xs text-muted-foreground">
+                              Esta selección controla los archivos que podrá adjuntar la persona durante la captura.
+                            </Text>
+                          </View>
+                        ) : null}
                         {field.type === "select" ||
-                        field.type === "multiselect" ? (
+                          field.type === "multiselect" ? (
                           <View className="gap-3">
                             <Text className="text-sm font-semibold">
                               Opciones de respuesta
@@ -1750,9 +2242,9 @@ function SuperAdminDashboard() {
                                             options[optionIndex - 1],
                                             options[optionIndex],
                                           ] = [
-                                            options[optionIndex],
-                                            options[optionIndex - 1],
-                                          ];
+                                              options[optionIndex],
+                                              options[optionIndex - 1],
+                                            ];
                                           return { ...item, options };
                                         }),
                                       )
@@ -1778,9 +2270,9 @@ function SuperAdminDashboard() {
                                             options[optionIndex],
                                             options[optionIndex + 1],
                                           ] = [
-                                            options[optionIndex + 1],
-                                            options[optionIndex],
-                                          ];
+                                              options[optionIndex + 1],
+                                              options[optionIndex],
+                                            ];
                                           return { ...item, options };
                                         }),
                                       )
@@ -1796,15 +2288,15 @@ function SuperAdminDashboard() {
                                         current.map((item, itemIndex) =>
                                           itemIndex === index
                                             ? {
-                                                ...item,
-                                                options: (
-                                                  item.options || []
-                                                ).filter(
-                                                  (_, currentOptionIndex) =>
-                                                    currentOptionIndex !==
-                                                    optionIndex,
-                                                ),
-                                              }
+                                              ...item,
+                                              options: (
+                                                item.options || []
+                                              ).filter(
+                                                (_, currentOptionIndex) =>
+                                                  currentOptionIndex !==
+                                                  optionIndex,
+                                              ),
+                                            }
                                             : item,
                                         ),
                                       )
@@ -1822,12 +2314,12 @@ function SuperAdminDashboard() {
                                   current.map((item, itemIndex) =>
                                     itemIndex === index
                                       ? {
-                                          ...item,
-                                          options: [
-                                            ...(item.options || []),
-                                            "",
-                                          ],
-                                        }
+                                        ...item,
+                                        options: [
+                                          ...(item.options || []),
+                                          "",
+                                        ],
+                                      }
                                       : item,
                                   ),
                                 )
@@ -1967,60 +2459,27 @@ function SuperAdminDashboard() {
                 />
               )}
               {section === "usuarios" && (
-                <AdminDataTable
-                  data={profiles.data || []}
-                  getRowId={(item) => item.id}
-                  searchPlaceholder="Buscar usuario, correo o unidad..."
-                  filterLabel="Todos los roles"
-                  filterOptions={["capturista", "gestor", "enlace", "secretaria", "super_admin"].map((value) => ({ label: value.replace("_", " "), value }))}
-                  getFilterValue={(item) => item.role}
-                  columns={[
-                    { key: "name", title: "USUARIO", value: (item) => `${item.name} ${item.email}`, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs text-muted-foreground">{item.email}</Text></View> },
-                    { key: "role", title: "ROL", value: (item) => item.role, width: 170, render: (item) => <Text className="capitalize">{item.role.replace("_", " ")}</Text> },
-                    { key: "unit", title: "UNIDAD", value: (item) => item.unitId ? unitNames[item.unitId] : "Acceso global", width: 260 },
-                    { key: "status", title: "ESTADO", value: (item) => item.active ? "Activo" : "Inactivo", width: 100, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-red-600"}`}>{item.active ? "Activo" : "Inactivo"}</Text> },
-                  ]}
-                  renderActions={(item) => item.role === "super_admin" ? <Text className="text-xs text-muted-foreground">Protegido</Text> : <Button size="sm" variant="outline" onPress={() => { setInvite({ id: item.id, name: item.name, email: item.email, password: "", unitId: item.unitId || units.data?.[0]?.id || "", role: item.role as "secretaria" | "enlace" | "gestor" | "capturista", active: item.active }); setUserModal(true); }}><Text>Editar</Text></Button>}
-                />
+                <View className="gap-5">
+
+                  <AdminDataTable
+                    data={profiles.data || []}
+                    getRowId={(item) => item.id}
+                    searchPlaceholder="Buscar usuario, correo o unidad..."
+                    filterLabel="Todos los roles"
+                    filterOptions={["capturista", "capturista_secretaria", "gestor", "enlace", "secretaria", "super_admin"].map((value) => ({ label: ROLE_DETAILS[value as keyof typeof ROLE_DETAILS].title, value }))}
+                    getFilterValue={(item) => item.role}
+                    columns={[
+                      { key: "name", title: "USUARIO", value: (item) => `${item.name} ${item.email}`, render: (item) => <View><Text className="font-semibold">{item.name}</Text><Text className="text-xs text-muted-foreground">{item.email}</Text></View> },
+                      { key: "role", title: "ROL", value: (item) => item.role, width: 190, render: (item) => <Text>{ROLE_DETAILS[item.role as keyof typeof ROLE_DETAILS]?.title || item.role.replace("_", " ")}</Text> },
+                      { key: "unit", title: "UNIDAD", value: (item) => item.unitId ? unitNames[item.unitId] : "Acceso global", width: 260 },
+                      { key: "status", title: "ESTADO", value: (item) => item.active ? "Activo" : "Inactivo", width: 100, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-red-600"}`}>{item.active ? "Activo" : "Inactivo"}</Text> },
+                    ]}
+                    renderActions={(item) => item.role === "super_admin" ? <Text className="text-xs text-muted-foreground">Protegido</Text> : <Button size="sm" variant="outline" onPress={() => { setInvite({ id: item.id, name: item.name, email: item.email, password: "", unitId: item.unitId || units.data?.[0]?.id || "", role: item.role as "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista", active: item.active }); setUserModal(true); }}><Text>Administrar</Text></Button>}
+                  />
+                </View>
               )}
               {section === "solicitudes" && (
                 <View className="gap-4">
-                  {/* Filtro por evento */}
-                  <View className="hidden flex-row items-center gap-3">
-                    <Text className="text-sm font-semibold">
-                      Filtrar por evento:
-                    </Text>
-                    <select
-                      value={solicitudesEventFilter}
-                      onChange={(e) =>
-                        setSolicitudesEventFilter(e.currentTarget.value)
-                      }
-                      style={{
-                        minHeight: 36,
-                        border: "1px solid #d4d4d8",
-                        borderRadius: 8,
-                        padding: "4px 10px",
-                        background: "transparent",
-                        color: "inherit",
-                        minWidth: 260,
-                      }}
-                    >
-                      <option value="">Todos los eventos</option>
-                      {events.data?.map((event) => (
-                        <option key={event.id} value={event.id}>
-                          {event.name} · {event.municipality}
-                        </option>
-                      ))}
-                    </select>
-                    {solicitudesEventFilter && (
-                      <Text className="text-xs text-muted-foreground">
-                        {requests.data?.filter(
-                          (r) => r.eventId === solicitudesEventFilter,
-                        ).length ?? 0}{" "}
-                        solicitudes
-                      </Text>
-                    )}
-                  </View>
                   <AdminDataTable
                     data={requests.data || []}
                     getRowId={(item) => item.id}
@@ -2038,59 +2497,6 @@ function SuperAdminDashboard() {
                     ]}
                     renderActions={(item) => <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${item.id}` as any)}><Text>Ver detalle</Text></Button>}
                   />
-                  <View className="hidden overflow-hidden rounded-2xl border border-border bg-card">
-                    <View className="flex-row bg-muted px-5 py-3">
-                      <Text className="flex-1 text-xs font-bold">FOLIO</Text>
-                      <Text className="w-48 text-xs font-bold">
-                        FOLIO EVENTO
-                      </Text>
-                      <Text className="w-64 text-xs font-bold">UNIDAD</Text>
-                      <Text className="w-40 text-xs font-bold">FECHA</Text>
-                      <Text className="w-44 text-xs font-bold">ESTATUS</Text>
-                    </View>
-                    {(() => {
-                      const filtered = solicitudesEventFilter
-                        ? (requests.data ?? []).filter(
-                            (r) => r.eventId === solicitudesEventFilter,
-                          )
-                        : (requests.data ?? []);
-                      if (!filtered.length) {
-                        return (
-                          <Text className="p-10 text-center text-muted-foreground">
-                            {solicitudesEventFilter
-                              ? "No hay solicitudes para este evento."
-                              : "No hay solicitudes registradas."}
-                          </Text>
-                        );
-                      }
-                      return filtered.map((item) => (
-                        <View
-                          key={item.id}
-                          className="flex-row border-t border-border px-5 py-4"
-                        >
-                          <Text className="flex-1 font-semibold">
-                            {item.folio || item.programFolio || "—"}
-                          </Text>
-                          <Text className="w-48 text-sm text-muted-foreground">
-                            {item.eventFolio || "—"}
-                          </Text>
-                          <Text className="w-64">
-                            {unitNames[item.unitId] || item.unitId || "—"}
-                          </Text>
-                          <Text className="w-40">
-                            {item.requestedAt
-                              ? new Date(item.requestedAt).toLocaleDateString(
-                                  "es-MX",
-                                )
-                              : "—"}
-                          </Text>
-                          <Text className="w-44 capitalize text-primary">
-                            {(item.status ?? "").replaceAll("_", " ")}
-                          </Text>
-                        </View>
-                      ));
-                    })()}
-                  </View>
                 </View>
               )}
             </>
@@ -2111,21 +2517,21 @@ function SuperAdminDashboard() {
               <Text className="mt-1 text-sm text-muted-foreground">Los gestores y trámites se relacionarán con esta unidad.</Text>
             </View>
             <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 20 }}>
-            <View className="grid grid-cols-[180px_1fr] gap-4">
-              <Field
-                label="Clave *"
-                value={unitForm.code}
-                onChangeText={(code) => setUnitForm({ ...unitForm, code: code.replace(/[^A-Za-z0-9_-]/g, "").toUpperCase() })}
-                placeholder="Ej. PROMOCION"
-              />
-              <Field label="Nombre *" value={unitForm.name} onChangeText={(name) => setUnitForm({ ...unitForm, name })} placeholder="Ej. Dirección de Promoción Turística" />
-            </View>
-            <Field label="Descripción (opcional)" value={unitForm.description} onChangeText={(description) => setUnitForm({ ...unitForm, description })} />
-            <Field label="Correo de contacto (opcional)" value={unitForm.contactEmail} onChangeText={(contactEmail) => setUnitForm({ ...unitForm, contactEmail })} placeholder="unidad@tabasco.gob.mx" />
-            <View className="flex-row items-center justify-between rounded-xl bg-muted p-4">
-              <View><Text className="font-semibold">Unidad activa</Text><Text className="text-xs text-muted-foreground">Las unidades activas pueden recibir trámites y gestores.</Text></View>
-              <Switch value={unitForm.active} onValueChange={(active) => setUnitForm({ ...unitForm, active })} />
-            </View>
+              <View className="grid grid-cols-[180px_1fr] gap-4">
+                <Field
+                  label="Clave *"
+                  value={unitForm.code}
+                  onChangeText={(code) => setUnitForm({ ...unitForm, code: code.replace(/[^A-Za-z0-9_-]/g, "").toUpperCase() })}
+                  placeholder="Ej. PROMOCION"
+                />
+                <Field label="Nombre *" value={unitForm.name} onChangeText={(name) => setUnitForm({ ...unitForm, name })} placeholder="Ej. Dirección de Promoción Turística" />
+              </View>
+              <Field label="Descripción (opcional)" value={unitForm.description} onChangeText={(description) => setUnitForm({ ...unitForm, description })} />
+              <Field label="Correo de contacto (opcional)" value={unitForm.contactEmail} onChangeText={(contactEmail) => setUnitForm({ ...unitForm, contactEmail })} placeholder="unidad@tabasco.gob.mx" />
+              <View className="flex-row items-center justify-between rounded-xl bg-muted p-4">
+                <View><Text className="font-semibold">Unidad activa</Text><Text className="text-xs text-muted-foreground">Las unidades activas pueden recibir trámites y gestores.</Text></View>
+                <Switch value={unitForm.active} onValueChange={(active) => setUnitForm({ ...unitForm, active })} />
+              </View>
             </ScrollView>
             <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
               <Button variant="outline" onPress={() => setUnitModal(false)}><Text>Cancelar</Text></Button>
@@ -2200,7 +2606,7 @@ function SuperAdminDashboard() {
                     Indica si es gratuito o cuánto debe pagar la persona.
                   </Text>
                 </View>
-                <View className="flex-row gap-2">
+                <View className="flex-row flex-wrap gap-2">
                   <Pressable
                     onPress={() => setForm({ ...form, cost: "Gratuito" })}
                     className={`rounded-xl border px-4 py-3 ${form.cost === "Gratuito" ? "border-primary bg-primary/10" : "border-border"}`}
@@ -2377,20 +2783,20 @@ function SuperAdminDashboard() {
               )}
             </ScrollView>
             <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
-                <Button
-                  variant="outline"
-                  onPress={() => setServiceModal(false)}
-                >
-                  <Text>Cancelar</Text>
-                </Button>
-                <Button
-                  disabled={save.isPending || serviceValidationErrors.length > 0}
-                  onPress={() => save.mutate()}
-                >
-                  <Text>
-                    {save.isPending ? "Guardando..." : "Guardar cambios"}
-                  </Text>
-                </Button>
+              <Button
+                variant="outline"
+                onPress={() => setServiceModal(false)}
+              >
+                <Text>Cancelar</Text>
+              </Button>
+              <Button
+                disabled={save.isPending || serviceValidationErrors.length > 0}
+                onPress={() => save.mutate()}
+              >
+                <Text>
+                  {save.isPending ? "Guardando..." : "Guardar cambios"}
+                </Text>
+              </Button>
             </View>
           </View>
         </View>
@@ -2404,13 +2810,13 @@ function SuperAdminDashboard() {
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
           <View className="max-h-[94vh] w-full max-w-5xl overflow-hidden rounded-2xl bg-background">
             <View className="border-b border-border px-7 py-5">
-                <Text className="text-2xl font-bold">
-                  {eventForm.id ? "Editar evento" : "Crear evento de atención"}
-                </Text>
-                <Text className="mt-1 text-sm text-muted-foreground">
-                  Selecciona un punto en el mapa para guardar la ubicación
-                  exacta.
-                </Text>
+              <Text className="text-2xl font-bold">
+                {eventForm.id ? "Editar evento" : "Crear evento de atención"}
+              </Text>
+              <Text className="mt-1 text-sm text-muted-foreground">
+                Selecciona un punto en el mapa para guardar la ubicación
+                exacta.
+              </Text>
             </View>
             <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 18 }}>
               <Field
@@ -2546,26 +2952,26 @@ function SuperAdminDashboard() {
               </View>
             </ScrollView>
             <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
-                <Button variant="outline" onPress={() => setEventModal(false)}>
-                  <Text>Cancelar</Text>
-                </Button>
-                <Button
-                  disabled={
-                    saveEvent.isPending ||
-                    !eventForm.name ||
-                    !eventForm.locality ||
-                    !eventForm.municipality ||
-                    !eventForm.address ||
-                    !eventForm.startsAt ||
-                    !eventForm.endsAt ||
-                    new Date(eventForm.endsAt).getTime() <= new Date(eventForm.startsAt).getTime()
-                  }
-                  onPress={() => saveEvent.mutate()}
-                >
-                  <Text>
-                    {saveEvent.isPending ? "Guardando..." : "Guardar evento"}
-                  </Text>
-                </Button>
+              <Button variant="outline" onPress={() => setEventModal(false)}>
+                <Text>Cancelar</Text>
+              </Button>
+              <Button
+                disabled={
+                  saveEvent.isPending ||
+                  !eventForm.name ||
+                  !eventForm.locality ||
+                  !eventForm.municipality ||
+                  !eventForm.address ||
+                  !eventForm.startsAt ||
+                  !eventForm.endsAt ||
+                  new Date(eventForm.endsAt).getTime() <= new Date(eventForm.startsAt).getTime()
+                }
+                onPress={() => saveEvent.mutate()}
+              >
+                <Text>
+                  {saveEvent.isPending ? "Guardando..." : "Guardar evento"}
+                </Text>
+              </Button>
             </View>
           </View>
         </View>
@@ -2577,7 +2983,7 @@ function SuperAdminDashboard() {
         onRequestClose={() => setUserModal(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/50 p-8">
-          <View className="max-h-[90vh] w-full max-w-xl overflow-hidden rounded-2xl bg-background">
+          <View className="h-[92vh] w-full max-w-3xl overflow-hidden rounded-2xl bg-background">
             <View className="border-b border-border px-7 py-5">
               <Text className="text-2xl font-bold">
                 {invite.id ? "Editar usuario institucional" : "Nuevo usuario institucional"}
@@ -2586,21 +2992,30 @@ function SuperAdminDashboard() {
             <ScrollView className="min-h-0 flex-1" contentContainerStyle={{ padding: 28, gap: 20 }}>
               <View className="gap-2">
                 <Text className="text-sm font-semibold">Rol</Text>
-                <View className="flex-row gap-2">
-                  {(["capturista", "gestor", "enlace", "secretaria"] as const).map((role) => (
+                <View className="flex-row flex-wrap gap-2">
+                  {(["capturista", "capturista_secretaria", "gestor", "enlace", "secretaria", "super_admin"] as const).map((role) => (
                     <Pressable
                       key={role}
                       onPress={() => setInvite({ ...invite, role })}
-                      className={`flex-1 rounded-xl border p-3 ${invite.role === role ? "border-primary bg-primary/10" : "border-border"}`}
+                      className={`min-w-[130px] flex-1 rounded-xl border p-3 ${invite.role === role ? "border-primary bg-primary/10" : "border-border"}`}
                     >
-                      <Text className="text-center capitalize">{role}</Text>
+                      <Text className="text-center">{ROLE_DETAILS[role].title}</Text>
                     </Pressable>
                   ))}
                 </View>
-                <Text className="text-xs text-muted-foreground">
-                  Capturista genera solicitudes sin unidad asignada; gestor y enlace
-                  atienden su unidad; Secretaría consulta el reporte general de solo lectura.
-                </Text>
+                <View className="rounded-xl bg-muted/60 p-3">
+                  <Text className="text-sm font-semibold">
+                    {ROLE_DETAILS[invite.role].title}
+                  </Text>
+                  <Text className="mt-1 text-xs leading-5 text-muted-foreground">
+                    {ROLE_DETAILS[invite.role].description}
+                  </Text>
+                </View>
+                {invite.role === "super_admin" ? (
+                  <Text className="text-xs font-semibold text-amber-700">
+                    Este usuario tendrá control total del sistema. Verifica cuidadosamente su correo antes de crearlo.
+                  </Text>
+                ) : null}
               </View>
               <Field
                 label="Nombre completo"
@@ -2614,15 +3029,21 @@ function SuperAdminDashboard() {
                   setInvite({ ...invite, email: email.toLowerCase() })
                 }
               />
-              {!invite.id ? (
+              <View className="gap-1">
                 <Field
-                  label="Contraseña temporal"
+                  label={invite.id ? "Nueva contraseña (opcional)" : "Contraseña temporal"}
                   value={invite.password}
                   onChangeText={(password) => setInvite({ ...invite, password })}
+                  placeholder={invite.id ? "Déjala vacía para conservar la contraseña actual" : "Mínimo 8 caracteres"}
                   secureTextEntry
                 />
-              ) : null}
-              {invite.role === "gestor" || invite.role === "enlace" ? (
+                {invite.id ? (
+                  <Text className="text-xs text-muted-foreground">
+                    La contraseña solo se restablecerá si escribes una nueva, con al menos 8 caracteres.
+                  </Text>
+                ) : null}
+              </View>
+              {invite.role === "gestor" || invite.role === "capturista" ? (
                 <UnitPicker
                   units={units.data || []}
                   value={invite.unitId}
@@ -2637,23 +3058,24 @@ function SuperAdminDashboard() {
               ) : null}
             </ScrollView>
             <View className="flex-row justify-end gap-3 border-t border-border px-7 py-5">
-                <Button variant="outline" onPress={() => setUserModal(false)}>
-                  <Text>Cancelar</Text>
-                </Button>
-                <Button
-                  disabled={
-                    createUser.isPending ||
-                    !invite.name ||
-                    !invite.email.endsWith("@tabasco.gob.mx") ||
-                    (!invite.id && invite.password.length < 8) ||
-                    ((invite.role === "gestor" || invite.role === "enlace") && !invite.unitId)
-                  }
-                  onPress={() => createUser.mutate()}
-                >
-                  <Text>
-                    {createUser.isPending ? "Guardando..." : invite.id ? "Guardar cambios" : "Crear usuario"}
-                  </Text>
-                </Button>
+              <Button variant="outline" onPress={() => setUserModal(false)}>
+                <Text>Cancelar</Text>
+              </Button>
+              <Button
+                disabled={
+                  createUser.isPending ||
+                  !invite.name ||
+                  !invite.email.endsWith("@tabasco.gob.mx") ||
+                  (!invite.id && invite.password.length < 8) ||
+                  (!!invite.id && invite.password.length > 0 && invite.password.length < 8) ||
+                   ((invite.role === "gestor" || invite.role === "capturista") && !invite.unitId)
+                }
+                onPress={() => createUser.mutate()}
+              >
+                <Text>
+                  {createUser.isPending ? "Guardando..." : invite.id ? "Guardar cambios" : "Crear usuario"}
+                </Text>
+              </Button>
             </View>
           </View>
         </View>

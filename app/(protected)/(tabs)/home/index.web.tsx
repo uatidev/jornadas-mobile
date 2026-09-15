@@ -107,7 +107,19 @@ export default function CapturistaWebDashboard() {
           <View className="mt-auto border-t border-border pt-5">
             <Text className="font-semibold">{user?.nombre}</Text>
             <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-              {user?.role === "capturista" ? "Capturista" : "Usuario"}
+              Rol: {user?.role === "super_admin"
+                ? "Superadministrador"
+                : user?.role === "secretaria"
+                  ? "Secretaría"
+                  : user?.role === "capturista_secretaria"
+                    ? "Capturista de Secretaría"
+                  : user?.role === "enlace"
+                    ? "Enlace de canalización"
+                    : user?.role === "gestor"
+                      ? "Gestor"
+                      : user?.role === "capturista"
+                        ? "Capturista"
+                        : "Usuario"}
             </Text>
             <Button variant="outline" onPress={handleLogout}>
               <Text>Cerrar sesión</Text>

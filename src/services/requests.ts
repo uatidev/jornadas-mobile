@@ -1,5 +1,5 @@
 import { Query } from "react-native-appwrite";
-import { ServiceRequest } from "@/src/types/request";
+import { RequestHistoryEntry, ServiceRequest } from "@/src/types/request";
 import { APPWRITE_CONFIG, getAppwriteDatabases } from "./appwrite";
 
 const parseData = (value?: string) => {
@@ -61,6 +61,27 @@ export const requestsService = {
       requestId,
     );
     return mapDoc(document);
+  },
+
+  async listHistory(requestId: string): Promise<RequestHistoryEntry[]> {
+    const result = await getAppwriteDatabases().listDocuments(
+      APPWRITE_CONFIG.DATABASE_ID,
+      APPWRITE_CONFIG.COLLECTIONS.HISTORIAL_SOLICITUD,
+      [
+        Query.equal("solicitudId", requestId),
+        Query.orderDesc("fecha"),
+        Query.limit(500),
+      ],
+    );
+    return result.documents.map((doc: any) => ({
+      id: doc.$id,
+      requestId: doc.solicitudId,
+      previousStatus: doc.estatusAnterior,
+      newStatus: doc.estatusNuevo,
+      comment: doc.comentario,
+      performedByUserId: doc.realizadoPorUserId,
+      date: doc.fecha,
+    }));
   },
 
   /** Bandeja operativa limitada explícitamente a una unidad administrativa. */

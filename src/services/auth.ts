@@ -14,7 +14,7 @@ export interface UserData {
   nombre: string;
   primerApellido: string;
   segundoApellido?: string;
-  role: "super_admin" | "secretaria" | "enlace" | "gestor" | "capturista" | "solicitante";
+  role: "super_admin" | "secretaria" | "capturista_secretaria" | "enlace" | "gestor" | "capturista" | "solicitante";
   unidadAdministrativaId?: string;
   labels?: string[]; // Labels de Appwrite
   profilePhoto?: string;
@@ -58,6 +58,8 @@ const mapAppwriteUserToUser = (
     ? "super_admin"
     : labels.includes("secretaria")
       ? "secretaria"
+    : labels.includes("capturistasecretaria")
+      ? "capturista_secretaria"
     : labels.includes("gestor")
       ? "gestor"
       : labels.includes("enlace")
