@@ -288,6 +288,8 @@ const schemas = {
     attr.string("descripcion", 1000, false),
     attr.string("titular", 160, false),
     attr.string("correoContacto", 254, false),
+    attr.string("telefonoContacto", 30, false),
+    attr.string("extensionTelefono", 12, false),
     attr.string("teamId", 64),
     attr.boolean("activo", false, true),
   ],
@@ -321,6 +323,7 @@ const schemas = {
     attr.string("titularResponsable", 200, false),
     attr.string("correoContacto", 254, false),
     attr.string("telefonoContacto", 30, false),
+    attr.string("extensionTelefono", 12, false),
   ],
   requisitos: [
     attr.string("tramiteServicioId", 64),

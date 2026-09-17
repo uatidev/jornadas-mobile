@@ -7,15 +7,18 @@
     "appwrite:bootstrap-admin": "node scripts/appwrite/bootstrap-admin.mjs",
     "appwrite:reset-data": "node scripts/appwrite/reset-data.mjs",
     "appwrite:reset-requests": "node scripts/appwrite/reset-requests.mjs",
+    "appwrite:clear-services-requests": "node scripts/appwrite/clear-services-and-requests.mjs",
     "appwrite:reset-users": "node scripts/appwrite/reset-users.mjs",
     "appwrite:deploy-function": "node scripts/appwrite/deploy-function.mjs",
     "appwrite:deploy-site": "node scripts/appwrite/deploy-site.mjs",
     "appwrite:grant-secretary": "node scripts/appwrite/grant-secretary-access.mjs",
+    "appwrite:add-contact-fields": "node scripts/appwrite/add-contact-fields.mjs",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "DARK_MODE=media DARK_MODE=media expo start --android",
     "ios": "DARK_MODE=media DARK_MODE=media expo start --ios",
     "web": "DARK_MODE=media DARK_MODE=media expo start --web",
+    "build:web": "expo export --platform web",
     "lint": "expo lint"
   },
   "dependencies": {

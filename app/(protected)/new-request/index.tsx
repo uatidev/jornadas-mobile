@@ -14,6 +14,7 @@ import { Text } from "@/src/components/ui/text";
 import { useCatalogService, useGlobalForm } from "@/src/hooks/useCatalog";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { identityApi } from "@/src/services/identityApi";
+import type { RequestReceipt } from "@/src/services/identityApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
@@ -64,6 +65,7 @@ export default function NewRequest() {
   const [priorityOnReopening, setPriorityOnReopening] = useState(false);
   const [priorityRequested, setPriorityRequested] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string>();
+  const [receipt, setReceipt] = useState<RequestReceipt>();
 
   const globalFields = globalForm?.fields || [];
   const forcedInstitutionalPriority = user?.role === "secretaria" || user?.role === "capturista_secretaria";
@@ -142,6 +144,7 @@ export default function NewRequest() {
       setEventFolio(result.eventFolio);
       setPriorityOnReopening(Boolean(result.priorityOnReopening));
       setEmailMessage(result.emailMessage);
+      setReceipt(result.receipt);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["secretaria", "requests"] }),
         queryClient.invalidateQueries({ queryKey: ["gestor", "requests"] }),
@@ -168,6 +171,7 @@ export default function NewRequest() {
     setPriorityOnReopening(false);
     setPriorityRequested(false);
     setEmailMessage(undefined);
+    setReceipt(undefined);
     setStage("intro");
   };
   const step =
@@ -206,6 +210,7 @@ export default function NewRequest() {
                 eventFolio={eventFolio}
                 priorityOnReopening={priorityOnReopening}
                 emailMessage={emailMessage}
+                receipt={receipt}
                 onClose={() => router.replace("/home" as any)}
                 onNew={reset}
               />

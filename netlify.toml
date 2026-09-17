@@ -1,0 +1,14 @@
+[build]
+  command = "bun run build:web"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"
+
+# Expone Appwrite bajo el mismo origen de la web para que Safari no bloquee
+# la cookie de sesión como una cookie de terceros.
+[[redirects]]
+  from = "/appwrite/v1/*"
+  to = "https://jornadasturismo.tabasco.gob.mx/v1/:splat"
+  status = 200
+  force = true

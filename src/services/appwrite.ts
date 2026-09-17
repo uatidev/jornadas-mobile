@@ -10,18 +10,28 @@ import {
 } from "react-native-appwrite";
 
 // Configuración de Appwrite usando variables de entorno
-const getAppwriteConfig = () => {
+export const getAppwriteConfig = () => {
   // En Expo, las variables de entorno pueden estar en:
   // 1. process.env.EXPO_PUBLIC_* (para variables públicas)
   // 2. Constants.expoConfig.extra (configurado en app.json)
   // 3. process.env.VITE_* (compatibilidad con Vite)
 
-  const endpoint = (
+  const configuredEndpoint = (
     process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT ||
     Constants.expoConfig?.extra?.appwriteEndpoint ||
     process.env.VITE_APPWRITE_PUBLIC_ENDPOINT ||
     ""
   ).trim();
+
+  // En Netlify, pasar por el mismo origen evita que Safari trate la sesión
+  // de Appwrite como una cookie de terceros. El rewrite vive en netlify.toml.
+  const isNetlifyWeb =
+    typeof window !== "undefined" &&
+    typeof window.location?.hostname === "string" &&
+    window.location.hostname.endsWith(".netlify.app");
+  const endpoint = isNetlifyWeb
+    ? `${window.location!.origin}/appwrite/v1`
+    : configuredEndpoint;
 
   const projectId = (
     process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID ||
@@ -30,9 +40,14 @@ const getAppwriteConfig = () => {
     ""
   ).trim();
 
-  const platform = Constants.expoConfig?.slug || "com.jornadasdeatencion.app";
+  // Appwrite valida las peticiones nativas contra el package/bundle ID
+  // registrado como plataforma, no contra el slug de Expo.
+  const platform =
+    Constants.expoConfig?.android?.package ||
+    Constants.expoConfig?.ios?.bundleIdentifier ||
+    "com.turismo.jornadasdeatencion";
 
-  if (!endpoint || !projectId) {
+  if (!configuredEndpoint || !projectId) {
     console.error("Appwrite configuration missing:", {
       endpoint: endpoint ? "✓" : "✗",
       projectId: projectId ? "✓" : "✗",
@@ -62,6 +77,20 @@ let databases: Databases | null = null;
 let storage: Storage | null = null;
 let functions: Functions | null = null;
 
+const applyWebFallbackSession = (target: Client, projectId: string): void => {
+  if (typeof window === "undefined" || !window.localStorage) return;
+
+  try {
+    const fallback = JSON.parse(
+      window.localStorage.getItem("cookieFallback") || "{}",
+    ) as Record<string, string>;
+    const session = fallback[`a_session_${projectId}`];
+    if (session) target.setSession(session);
+  } catch (error) {
+    console.warn("No se pudo restaurar la sesión web de Appwrite", error);
+  }
+};
+
 export const getAppwriteClient = (): Client => {
   if (!client) {
     const config = getAppwriteConfig();
@@ -70,8 +99,18 @@ export const getAppwriteClient = (): Client => {
       .setEndpoint(config.endpoint)
       .setProject(config.projectId)
       .setPlatform(config.platform);
+    applyWebFallbackSession(client, config.projectId);
   }
   return client;
+};
+
+// El SDK React Native conserva la sesión alternativa que Appwrite devuelve
+// a navegadores con cookies restringidas, pero en web no la aplica a las
+// solicitudes HTTP posteriores. Safari necesita que la restauremos después
+// de crear la sesión.
+export const refreshAppwriteWebSession = (): void => {
+  const config = getAppwriteConfig();
+  applyWebFallbackSession(getAppwriteClient(), config.projectId);
 };
 
 export const getAppwriteAccount = (): Account => {

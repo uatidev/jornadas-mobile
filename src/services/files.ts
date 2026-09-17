@@ -1,9 +1,9 @@
 import { Platform } from "react-native";
-import Constants from "expo-constants";
 import { File as ExpoFile } from "expo-file-system";
 import { Permission, Role } from "react-native-appwrite";
 import {
   APPWRITE_CONFIG,
+  getAppwriteConfig,
   getAppwriteStorage,
   ID,
 } from "./appwrite";
@@ -134,17 +134,7 @@ Formato archivo: ${Platform.OS === "web" ? "File web" : "ExpoFile nativo"}`;
       }
 
       // Construir la URL del archivo usando el mismo método que getImageUrl
-      const endpoint =
-        process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT ||
-        Constants.expoConfig?.extra?.appwriteEndpoint ||
-        process.env.VITE_APPWRITE_PUBLIC_ENDPOINT ||
-        "";
-
-      const projectId =
-        process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID ||
-        Constants.expoConfig?.extra?.appwriteProjectId ||
-        process.env.VITE_APPWRITE_PROJECT_ID ||
-        "";
+      const { endpoint, projectId } = getAppwriteConfig();
 
       const fileUrl = `${endpoint}/storage/buckets/${bucketId}/files/${response.$id}/view?project=${projectId}`;
 
@@ -216,18 +206,7 @@ Formato archivo: ${Platform.OS === "web" ? "File web" : "ExpoFile nativo"}`;
   ): string {
     const bucketId = this.getBucketId(bucketType);
 
-    // Obtener endpoint y projectId de la misma manera que en appwrite.ts
-    const endpoint =
-      process.env.EXPO_PUBLIC_APPWRITE_ENDPOINT ||
-      Constants.expoConfig?.extra?.appwriteEndpoint ||
-      process.env.VITE_APPWRITE_PUBLIC_ENDPOINT ||
-      "";
-
-    const projectId =
-      process.env.EXPO_PUBLIC_APPWRITE_PROJECT_ID ||
-      Constants.expoConfig?.extra?.appwriteProjectId ||
-      process.env.VITE_APPWRITE_PROJECT_ID ||
-      "";
+    const { endpoint, projectId } = getAppwriteConfig();
 
     // Validar que tengamos endpoint y projectId
     if (!endpoint || !projectId) {

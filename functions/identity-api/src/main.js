@@ -20,6 +20,9 @@ const sendRequestConfirmation = async ({
   unit,
   event,
   requestedAt,
+  attendedBy,
+  applicantData,
+  requestData,
 }) => {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -37,15 +40,38 @@ const sendRequestConfirmation = async ({
     auth: { user, pass: password },
   });
   const lines = [
+    "COMPROBANTE DE SOLICITUD",
     "Tu solicitud fue registrada correctamente.",
     "",
     `Folio de la solicitud: ${folio}`,
-    `Trámite o programa: ${service.nombre}`,
-    `Unidad responsable: ${unit.nombre}`,
-    `Evento: ${event?.nombre || "Registro fuera de evento"}`,
     `Folio del evento: ${eventFolio || "No aplica"}`,
-    `Fecha de registro: ${requestedAt.toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`,
-    "Estatus: Enviada",
+    `Trámite o programa: ${service.nombre}`,
+    `Tipo: ${service.tipo || "servicio"}`,
+    "Estatus al momento del registro: Enviada",
+    `Fecha y hora: ${requestedAt.toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`,
+    `Atendió: ${attendedBy || "Personal de atención"}`,
+    "",
+    "LUGAR DE ATENCIÓN",
+    `Evento: ${event?.nombre || "Registro fuera de evento"}`,
+    `Sede: ${event?.sede || "No especificada"}`,
+    `Dirección: ${event?.direccion || "No especificada"}`,
+    `Localidad y municipio: ${[event?.localidad, event?.municipio].filter(Boolean).join(", ") || "No especificados"}`,
+    "",
+    "UNIDAD RESPONSABLE",
+    `Unidad responsable: ${unit.nombre}`,
+    `Encargado del área: ${unit.titular || "No especificado"}`,
+    `Correo: ${unit.correoContacto || "No especificado"}`,
+    `Teléfono: ${unit.telefonoContacto || "No especificado"}${unit.extensionTelefono ? ` ext. ${unit.extensionTelefono}` : ""}`,
+    "",
+    "CONTACTO DEL TRÁMITE",
+    `Responsable: ${service.titularResponsable || "No especificado"}`,
+    `Correo: ${service.correoContacto || "No especificado"}`,
+    `Teléfono: ${service.telefonoContacto || "No especificado"}${service.extensionTelefono ? ` ext. ${service.extensionTelefono}` : ""}`,
+    "",
+    "DATOS CAPTURADOS",
+    ...Object.entries({ ...(applicantData || {}), ...(requestData || {}) })
+      .filter(([key, value]) => !key.startsWith("__") && value !== undefined && value !== null && String(value).trim())
+      .map(([key, value]) => `${key}: ${String(value)}`),
     "",
     "Conserva este correo para dar seguimiento a tu solicitud.",
   ];
@@ -214,7 +240,10 @@ export default async ({ req, res, log, error }) => {
               clave: code,
               nombre: name,
               descripcion: String(input.description || "").trim() || null,
+              titular: String(input.contactName || "").trim() || null,
               correoContacto: String(input.contactEmail || "").trim().toLowerCase() || null,
+              telefonoContacto: String(input.contactPhone || "").trim() || null,
+              extensionTelefono: String(input.contactExtension || "").trim() || null,
               activo: input.active !== false,
             },
           },
@@ -236,7 +265,10 @@ export default async ({ req, res, log, error }) => {
               clave: code,
               nombre: name,
               descripcion: String(input.description || "").trim() || null,
+              titular: String(input.contactName || "").trim() || null,
               correoContacto: String(input.contactEmail || "").trim().toLowerCase() || null,
+              telefonoContacto: String(input.contactPhone || "").trim() || null,
+              extensionTelefono: String(input.contactExtension || "").trim() || null,
               teamId: team.$id,
               activo: input.active !== false,
             },
@@ -389,6 +421,9 @@ export default async ({ req, res, log, error }) => {
             unit,
             event,
             requestedAt: stamp,
+            attendedBy: profile.nombre || account.name || account.email,
+            applicantData: input.applicantData,
+            requestData: input.requestData,
           });
         } catch (cause) {
           emailResult = {
@@ -409,6 +444,27 @@ export default async ({ req, res, log, error }) => {
         emailMessage: emailResult.sent
           ? "Confirmación enviada por correo"
           : emailResult.reason,
+        receipt: {
+          serviceName: service.nombre,
+          serviceType: service.tipo,
+          status: request.estatus,
+          requestedAt: stamp.toISOString(),
+          attendedBy: profile.nombre || account.name || account.email,
+          unitName: unit.nombre,
+          unitContactName: unit.titular,
+          unitContactEmail: unit.correoContacto,
+          unitContactPhone: unit.telefonoContacto,
+          unitContactExtension: unit.extensionTelefono,
+          serviceContactName: service.titularResponsable,
+          serviceContactEmail: service.correoContacto,
+          serviceContactPhone: service.telefonoContacto,
+          serviceContactExtension: service.extensionTelefono,
+          eventName: event.nombre,
+          eventVenue: event.sede,
+          eventAddress: event.direccion,
+          eventLocality: event.localidad,
+          eventMunicipality: event.municipio,
+        },
       });
     }
 

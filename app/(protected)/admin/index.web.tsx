@@ -16,6 +16,7 @@ import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import {
   adminService,
   AttentionEventInput,
@@ -64,12 +65,15 @@ import { Redirect, useRouter } from "expo-router";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Modal,
   Pressable,
   ScrollView,
   Switch,
   View,
 } from "react-native";
+
+const DEFAULT_SERVICE_IMAGE = require("@/src/assets/images/logo-turismo.png");
 
 type Section =
   | "resumen"
@@ -345,13 +349,64 @@ function OperationalSidebar({
         )}
       </View>
       <View className="mt-auto border-t border-border pt-5">
-        <Text className="font-semibold">{user?.nombre}</Text>
-        <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-          {active === "canalizacion" || active === "reportes" ? "Rol: Enlace de canalización" : `Rol: Gestor · ${units.isLoading ? "Cargando..." : assignedUnit?.name || "Sin unidad asignada"}`}
-        </Text>
+        <View className="mb-4 flex-row items-center gap-3">
+          <View className="min-w-0 flex-1">
+            <Text className="font-semibold" numberOfLines={1}>{user?.nombre}</Text>
+            <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
+              {active === "canalizacion" || active === "reportes" ? "Rol: Enlace de canalización" : `Rol: Gestor · ${units.isLoading ? "Cargando..." : assignedUnit?.name || "Sin unidad asignada"}`}
+            </Text>
+          </View>
+          <SidebarThemeButton />
+        </View>
         <Button variant="outline" onPress={logout}><Text>Cerrar sesión</Text></Button>
       </View>
     </View>
+  );
+}
+
+function AdminRefreshButton({ queryKey }: { queryKey: string }) {
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
+  const refresh = async () => {
+    setRefreshing(true);
+    try {
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: [queryKey], type: "active" }),
+        queryClient.refetchQueries({ queryKey: ["sidebar"], type: "active" }),
+      ]);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  return (
+    <Button variant="outline" disabled={refreshing} onPress={refresh}>
+      {refreshing ? <ActivityIndicator size="small" color="#981646" /> : <Monicon name="ci:refresh" size={18} color="#981646" />}
+      <Text>{refreshing ? "Actualizando..." : "Actualizar datos"}</Text>
+    </Button>
+  );
+}
+
+function SidebarThemeButton() {
+  const { colorScheme, toggleTheme } = useTheme();
+  const isDark = colorScheme === "dark";
+  const label = isDark ? "Cambiar a modo claro" : "Cambiar a modo oscuro";
+
+  return (
+    <div className="w-fit" title={label}>
+      <Button
+        variant="outline"
+        size="icon"
+        className="rounded-full"
+        accessibilityLabel={label}
+        onPress={() => void toggleTheme()}
+      >
+        <Monicon
+          name={isDark ? "ic:outline-light-mode" : "ic:outline-dark-mode"}
+          size={19}
+          color={isDark ? "#f4f4f5" : "#27272a"}
+        />
+      </Button>
+    </div>
   );
 }
 
@@ -535,6 +590,7 @@ function GestorDashboard() {
               {user?.nombre} · Solicitudes de tu unidad administrativa
             </Text>
           </View>
+          <AdminRefreshButton queryKey="gestor" />
         </View>
         <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
           {notice ? (
@@ -864,6 +920,7 @@ function EnlaceDashboard() {
               {user?.nombre} · {section === "canalizacion" ? "Revisión de solicitudes que no aplican en su unidad original" : "Resultados globales de la canalización entre unidades"}
             </Text>
           </View>
+          <AdminRefreshButton queryKey="enlace" />
         </View>
         <ScrollView contentContainerStyle={{ padding: 32, gap: 16 }}>
           {section === "canalizacion" ? (
@@ -1287,10 +1344,15 @@ function SecretaryDashboard() {
           ))}
         </View>
         <View className="mt-auto border-t border-border pt-5">
-          <Text className="font-semibold">{user?.nombre}</Text>
-          <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-            Rol: Secretaría · Consulta general
-          </Text>
+          <View className="mb-4 flex-row items-center gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className="font-semibold" numberOfLines={1}>{user?.nombre}</Text>
+              <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
+                Rol: Secretaría · Consulta general
+              </Text>
+            </View>
+            <SidebarThemeButton />
+          </View>
           <Button variant="outline" onPress={logout}><Text>Cerrar sesión</Text></Button>
         </View>
       </View>
@@ -1305,11 +1367,14 @@ function SecretaryDashboard() {
               Secretaría de Turismo y Desarrollo Económico
             </Text>
           </View>
-          {section === "solicitudes" ? (
-            <Button disabled={!filteredRequests.length} onPress={exportCsv}>
-              <Text>Exportar CSV</Text>
-            </Button>
-          ) : null}
+          <View className="flex-row gap-3">
+            <AdminRefreshButton queryKey="secretaria" />
+            {section === "solicitudes" ? (
+              <Button disabled={!filteredRequests.length} onPress={exportCsv}>
+                <Text>Exportar CSV</Text>
+              </Button>
+            ) : null}
+          </View>
         </View>
         <ScrollView contentContainerStyle={{ padding: 32, gap: 24 }}>
           {section === "solicitudes" ? <View className="flex-row flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-5">
@@ -1560,7 +1625,10 @@ function SuperAdminDashboard() {
     code: "",
     name: "",
     description: "",
+    contactName: "",
     contactEmail: "",
+    contactPhone: "",
+    contactExtension: "",
     active: true,
   });
   const [specificFieldsDraft, setSpecificFieldsDraft] = useState<
@@ -1746,7 +1814,7 @@ function SuperAdminDashboard() {
     setServiceModal(true);
   };
   const openNewUnit = () => {
-    setUnitForm({ id: "", code: "", name: "", description: "", contactEmail: "", active: true });
+    setUnitForm({ id: "", code: "", name: "", description: "", contactName: "", contactEmail: "", contactPhone: "", contactExtension: "", active: true });
     setUnitModal(true);
     setNotice(null);
   };
@@ -1846,7 +1914,7 @@ function SuperAdminDashboard() {
     <View className="h-screen flex-row bg-muted/30">
       <View className="w-72 border-r border-border bg-card p-5">
         <View className="mb-8 border-b border-border pb-5">
-          <Text className="text-xl font-bold text-primary">Jornadas</Text>
+          <Text className="text-xl font-bold text-primary">Atencio Ciudadana</Text>
           <Text className="mt-1 text-xs text-muted-foreground">
             Panel de administración
           </Text>
@@ -1883,10 +1951,15 @@ function SuperAdminDashboard() {
           </Pressable>
         </View>
         <View className="mt-auto border-t border-border pt-5">
-          <Text className="font-semibold">{user?.nombre}</Text>
-          <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-            Rol: Superadministrador
-          </Text>
+          <View className="mb-4 flex-row items-center gap-3">
+            <View className="min-w-0 flex-1">
+              <Text className="font-semibold" numberOfLines={1}>{user?.nombre}</Text>
+              <Text className="mt-1 text-xs text-muted-foreground">
+                Rol: Superadministrador
+              </Text>
+            </View>
+            <SidebarThemeButton />
+          </View>
           <Button variant="outline" onPress={logout}>
             <Text>Cerrar sesión</Text>
           </Button>
@@ -1903,28 +1976,31 @@ function SuperAdminDashboard() {
               Secretaría de Turismo y Desarrollo Económico
             </Text>
           </View>
-          {section === "unidades" ? (
-            <Button onPress={openNewUnit}>
-              <Text>+ Nueva unidad</Text>
-            </Button>
-          ) : section === "tramites" ? (
-            <Button onPress={openNew}>
-              <Text>+ Nuevo trámite</Text>
-            </Button>
-          ) : section === "eventos" ? (
-            <Button onPress={openNewEvent}>
-              <Text>+ Nuevo evento</Text>
-            </Button>
-          ) : section === "usuarios" ? (
-            <Button
-              onPress={() => {
-                setInvite({ id: "", name: "", email: "", password: "", unitId: units.data?.[0]?.id || "", role: "capturista", active: true });
-                setUserModal(true);
-              }}
-            >
-              <Text>+ Nuevo usuario</Text>
-            </Button>
-          ) : null}
+          <View className="flex-row gap-3">
+            <AdminRefreshButton queryKey="admin" />
+            {section === "unidades" ? (
+              <Button onPress={openNewUnit}>
+                <Text>+ Nueva unidad</Text>
+              </Button>
+            ) : section === "tramites" ? (
+              <Button onPress={openNew}>
+                <Text>+ Nuevo trámite</Text>
+              </Button>
+            ) : section === "eventos" ? (
+              <Button onPress={openNewEvent}>
+                <Text>+ Nuevo evento</Text>
+              </Button>
+            ) : section === "usuarios" ? (
+              <Button
+                onPress={() => {
+                  setInvite({ id: "", name: "", email: "", password: "", unitId: units.data?.[0]?.id || "", role: "capturista", active: true });
+                  setUserModal(true);
+                }}
+              >
+                <Text>+ Nuevo usuario</Text>
+              </Button>
+            ) : null}
+          </View>
         </View>
         {notice ? (
           <View className="mx-8 mt-5 rounded-xl border border-primary/30 bg-primary/10 p-3">
@@ -2438,7 +2514,7 @@ function SuperAdminDashboard() {
                     { key: "contact", title: "CONTACTO", value: (item) => item.contactEmail || "—", width: 260 },
                     { key: "status", title: "ESTADO", value: (item) => item.active ? "Activa" : "Inactiva", width: 110, render: (item) => <Text className={`font-semibold ${item.active ? "text-emerald-600" : "text-muted-foreground"}`}>{item.active ? "Activa" : "Inactiva"}</Text> },
                   ]}
-                  renderActions={(item) => <Button size="sm" variant="outline" onPress={() => { setUnitForm({ id: item.id, code: item.code, name: item.name, description: item.description || "", contactEmail: item.contactEmail || "", active: item.active }); setUnitModal(true); }}><Text>Editar</Text></Button>}
+                  renderActions={(item) => <Button size="sm" variant="outline" onPress={() => { setUnitForm({ id: item.id, code: item.code, name: item.name, description: item.description || "", contactName: item.contactName || "", contactEmail: item.contactEmail || "", contactPhone: item.contactPhone || "", contactExtension: item.contactExtension || "", active: item.active }); setUnitModal(true); }}><Text>Editar</Text></Button>}
                 />
               )}
               {section === "tramites" && (
@@ -2527,7 +2603,12 @@ function SuperAdminDashboard() {
                 <Field label="Nombre *" value={unitForm.name} onChangeText={(name) => setUnitForm({ ...unitForm, name })} placeholder="Ej. Dirección de Promoción Turística" />
               </View>
               <Field label="Descripción (opcional)" value={unitForm.description} onChangeText={(description) => setUnitForm({ ...unitForm, description })} />
-              <Field label="Correo de contacto (opcional)" value={unitForm.contactEmail} onChangeText={(contactEmail) => setUnitForm({ ...unitForm, contactEmail })} placeholder="unidad@tabasco.gob.mx" />
+              <Field label="Encargado del área (opcional)" value={unitForm.contactName} onChangeText={(contactName) => setUnitForm({ ...unitForm, contactName })} placeholder="Nombre completo" />
+              <View className="grid grid-cols-[1fr_1fr_120px] gap-4">
+                <Field label="Correo de contacto (opcional)" value={unitForm.contactEmail} onChangeText={(contactEmail) => setUnitForm({ ...unitForm, contactEmail })} placeholder="unidad@tabasco.gob.mx" />
+                <Field label="Teléfono (opcional)" value={unitForm.contactPhone} onChangeText={(contactPhone) => setUnitForm({ ...unitForm, contactPhone })} placeholder="993 000 0000" />
+                <Field label="Extensión" value={unitForm.contactExtension} onChangeText={(contactExtension) => setUnitForm({ ...unitForm, contactExtension })} placeholder="1234" />
+              </View>
               <View className="flex-row items-center justify-between rounded-xl bg-muted p-4">
                 <View><Text className="font-semibold">Unidad activa</Text><Text className="text-xs text-muted-foreground">Las unidades activas pueden recibir trámites y gestores.</Text></View>
                 <Switch value={unitForm.active} onValueChange={(active) => setUnitForm({ ...unitForm, active })} />
@@ -2633,18 +2714,21 @@ function SuperAdminDashboard() {
                 <Text className="text-sm font-semibold">
                   Imagen del programa, servicio o trámite (opcional)
                 </Text>
-                {form.imageUrl ? (
-                  <img
-                    src={form.imageUrl}
-                    alt={form.name || "Imagen actual"}
-                    style={{
-                      width: 180,
-                      height: 110,
-                      objectFit: "cover",
-                      borderRadius: 10,
-                    }}
-                  />
-                ) : null}
+                <Image
+                  accessibilityLabel={form.name || "Imagen del trámite"}
+                  source={
+                    form.imageUrl
+                      ? { uri: form.imageUrl }
+                      : DEFAULT_SERVICE_IMAGE
+                  }
+                  resizeMode={form.imageUrl ? "cover" : "contain"}
+                  style={{
+                    width: 180,
+                    height: 110,
+                    borderRadius: 10,
+                    backgroundColor: "#ffffff",
+                  }}
+                />
                 <input
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
@@ -2674,9 +2758,9 @@ function SuperAdminDashboard() {
                 value={form.unitId}
                 onChange={(unitId) => setForm({ ...form, unitId })}
               />
-              <View className="grid grid-cols-3 gap-4">
+              <View className="grid grid-cols-4 gap-4">
                 <Field
-                  label="Titular actual de la unidad (opcional)"
+                  label="Responsable del trámite (opcional)"
                   value={form.contactName || ""}
                   onChangeText={(contactName) =>
                     setForm({ ...form, contactName })
@@ -2697,6 +2781,14 @@ function SuperAdminDashboard() {
                     setForm({ ...form, contactPhone })
                   }
                   placeholder="993 000 0000"
+                />
+                <Field
+                  label="Extensión"
+                  value={form.contactExtension || ""}
+                  onChangeText={(contactExtension) =>
+                    setForm({ ...form, contactExtension })
+                  }
+                  placeholder="1234"
                 />
               </View>
               <View className="flex-row gap-4">

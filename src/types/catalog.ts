@@ -5,7 +5,10 @@ export interface AdministrativeUnit {
   code: string;
   name: string;
   description?: string;
+  contactName?: string;
   contactEmail?: string;
+  contactPhone?: string;
+  contactExtension?: string;
   teamId: string;
   active: boolean;
 }
@@ -31,6 +34,7 @@ export interface ProcedureService {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  contactExtension?: string;
 }
 
 export interface ServiceFormField {

@@ -9,17 +9,20 @@
       "distribution": "internal",
       "env": {
         "EXPO_PUBLIC_APPWRITE_ENDPOINT": "https://jornadasturismo.tabasco.gob.mx/v1",
-        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "68cde1400002c52eb08d",
-        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "G888ZCWSKY1BX"
+        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "6a99a27300154bdcf449",
+        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "K84181994588957"
       },
       "channel": "development"
     },
     "preview": {
       "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      },
       "env": {
         "EXPO_PUBLIC_APPWRITE_ENDPOINT": "https://jornadasturismo.tabasco.gob.mx/v1",
-        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "68cde1400002c52eb08d",
-        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "G888ZCWSKY1BX"
+        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "6a99a27300154bdcf449",
+        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "K84181994588957"
       },
       "channel": "preview"
     },
@@ -27,8 +30,8 @@
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APPWRITE_ENDPOINT": "https://jornadasturismo.tabasco.gob.mx/v1",
-        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "68cde1400002c52eb08d",
-        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "G888ZCWSKY1BX"
+        "EXPO_PUBLIC_APPWRITE_PROJECT_ID": "6a99a27300154bdcf449",
+        "EXPO_PUBLIC_OCR_SPACE_API_KEY": "K84181994588957"
       },
       "channel": "production"
     }

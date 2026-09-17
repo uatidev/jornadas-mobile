@@ -12,11 +12,14 @@ import Monicon from "@monicon/native";
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   View,
   useWindowDimensions,
 } from "react-native";
+
+const DEFAULT_SERVICE_IMAGE = require("@/src/assets/images/logo-turismo.png");
 
 const getAvailability = (service: ProcedureService) => {
   const now = Date.now();
@@ -245,11 +248,22 @@ export default function CapturistaWebDashboard() {
                         className={`${compact ? "gap-3" : "grid grid-cols-[120px_1fr_150px_180px] items-center gap-4"} border-t border-border px-5 py-4 first:border-t-0`}
                       >
                         <Text className="text-sm font-bold text-primary">{service.code}</Text>
-                        <View>
-                          <Text className="font-semibold">{service.name}</Text>
-                          <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
-                            {service.description}
-                          </Text>
+                        <View className="flex-row items-center gap-3">
+                          <Image
+                            source={
+                              service.imageUrl
+                                ? { uri: service.imageUrl }
+                                : DEFAULT_SERVICE_IMAGE
+                            }
+                            resizeMode={service.imageUrl ? "cover" : "contain"}
+                            className="h-14 w-20 rounded-lg bg-white"
+                          />
+                          <View className="flex-1">
+                            <Text className="font-semibold">{service.name}</Text>
+                            <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
+                              {service.description}
+                            </Text>
+                          </View>
                         </View>
                         <Text className={availability.open ? "text-sm font-semibold text-green-700" : "text-sm font-semibold text-amber-700"}>
                           {availability.label}

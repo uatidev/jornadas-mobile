@@ -310,6 +310,7 @@ export function RequestSuccess({
   eventFolio,
   priorityOnReopening,
   emailMessage,
+  receipt,
   onClose,
   onNew,
 }: {
@@ -318,6 +319,7 @@ export function RequestSuccess({
   eventFolio?: string;
   priorityOnReopening?: boolean;
   emailMessage?: string;
+  receipt?: import("@/src/services/identityApi").RequestReceipt;
   onClose: () => void;
   onNew: () => void;
 }) {
@@ -352,6 +354,30 @@ export function RequestSuccess({
           <Text className="mt-1 text-center text-sm text-amber-800">
             La unidad responsable podrá identificarla y atenderla con prioridad.
           </Text>
+        </View>
+      ) : null}
+      {receipt ? (
+        <View className="w-full gap-3 rounded-xl border border-border p-4">
+          <Text className="font-bold">Comprobante de solicitud</Text>
+          <Text>Trámite: {receipt.serviceName}</Text>
+          <Text>Estatus: {receipt.status}</Text>
+          <Text>
+            Fecha y hora: {new Date(receipt.requestedAt).toLocaleString("es-MX")}
+          </Text>
+          <Text>Atendió: {receipt.attendedBy}</Text>
+          <Text>Lugar: {[receipt.eventVenue, receipt.eventLocality, receipt.eventMunicipality].filter(Boolean).join(", ")}</Text>
+          <View className="border-t border-border pt-3">
+            <Text className="font-semibold">Unidad responsable: {receipt.unitName}</Text>
+            {receipt.unitContactName ? <Text>Encargado: {receipt.unitContactName}</Text> : null}
+            {receipt.unitContactEmail ? <Text>Correo: {receipt.unitContactEmail}</Text> : null}
+            {receipt.unitContactPhone ? <Text>Teléfono: {receipt.unitContactPhone}{receipt.unitContactExtension ? ` ext. ${receipt.unitContactExtension}` : ""}</Text> : null}
+          </View>
+          <View className="border-t border-border pt-3">
+            <Text className="font-semibold">Contacto del trámite</Text>
+            {receipt.serviceContactName ? <Text>Responsable: {receipt.serviceContactName}</Text> : null}
+            {receipt.serviceContactEmail ? <Text>Correo: {receipt.serviceContactEmail}</Text> : null}
+            {receipt.serviceContactPhone ? <Text>Teléfono: {receipt.serviceContactPhone}{receipt.serviceContactExtension ? ` ext. ${receipt.serviceContactExtension}` : ""}</Text> : null}
+          </View>
         </View>
       ) : null}
       {emailMessage ? (

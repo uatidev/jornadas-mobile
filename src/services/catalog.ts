@@ -31,7 +31,10 @@ export const catalogService = {
       code: doc.clave,
       name: doc.nombre,
       description: doc.descripcion,
+      contactName: doc.titular,
       contactEmail: doc.correoContacto,
+      contactPhone: doc.telefonoContacto,
+      contactExtension: doc.extensionTelefono,
       teamId: doc.teamId,
       active: doc.activo,
     }));
@@ -64,6 +67,7 @@ export const catalogService = {
       contactName: doc.titularResponsable,
       contactEmail: doc.correoContacto,
       contactPhone: doc.telefonoContacto,
+      contactExtension: doc.extensionTelefono,
     }));
   },
 
@@ -94,6 +98,7 @@ export const catalogService = {
       contactName: doc.titularResponsable,
       contactEmail: doc.correoContacto,
       contactPhone: doc.telefonoContacto,
+      contactExtension: doc.extensionTelefono,
     };
   },
 

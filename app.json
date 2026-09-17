@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "Jornadas de Atención - Secretaría de Turismo y Desarrollo Económico",
-    "slug": "jornadas-de-atencion",
+    "slug": "atencion-ciudadana",
     "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
@@ -54,7 +54,7 @@
     },
     "web": {
       "bundler": "metro",
-      "output": "static",
+      "output": "single",
       "favicon": "./src/assets/images/favicon.png",
       "title": "Jornadas de Atención - Secretaría de Turismo y Desarrollo Económico",
       "description": "Sistema oficial de levantamiento de información del Secretaría de Turismo y Desarrollo Económico. Formularios para promociones, desarrollo turístico, ferias, comercio y economía social.",
@@ -113,7 +113,7 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "83eec167-69d8-46cc-8bf1-136604545dd9"
+        "projectId": "34b4f3c2-551b-413b-95b8-1e4c69845b44"
       },
       "appwriteEndpoint": "https://jornadasturismo.tabasco.gob.mx/v1",
       "appwriteProjectId": "6a99a27300154bdcf449",
@@ -121,7 +121,7 @@
     },
     "runtimeVersion": "1.0.0",
     "updates": {
-      "url": "https://u.expo.dev/83eec167-69d8-46cc-8bf1-136604545dd9"
+      "url": "https://u.expo.dev/34b4f3c2-551b-413b-95b8-1e4c69845b44"
     }
   }
 }

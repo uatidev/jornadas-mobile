@@ -30,6 +30,29 @@ export interface SubmittedRequest {
   priorityOnReopening?: boolean;
   emailSent?: boolean;
   emailMessage?: string;
+  receipt?: RequestReceipt;
+}
+
+export interface RequestReceipt {
+  serviceName: string;
+  serviceType: string;
+  status: string;
+  requestedAt: string;
+  attendedBy: string;
+  unitName: string;
+  unitContactName?: string;
+  unitContactEmail?: string;
+  unitContactPhone?: string;
+  unitContactExtension?: string;
+  serviceContactName?: string;
+  serviceContactEmail?: string;
+  serviceContactPhone?: string;
+  serviceContactExtension?: string;
+  eventName: string;
+  eventVenue?: string;
+  eventAddress?: string;
+  eventLocality?: string;
+  eventMunicipality?: string;
 }
 
 export interface ReportingStaffMember {
@@ -109,7 +132,10 @@ export const identityApi = {
     code: string;
     name: string;
     description?: string;
+    contactName?: string;
     contactEmail?: string;
+    contactPhone?: string;
+    contactExtension?: string;
     active: boolean;
   }) => execute({ action: "saveAdministrativeUnit", ...data }),
 };

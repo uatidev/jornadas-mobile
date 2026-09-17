@@ -117,7 +117,7 @@ export default function TabsLayout() {
           href: null,
           tabBarIcon: ({ color, size }) => (
             <Monicon
-              name="ic:outline-investment"
+              name="mdi:finance"
               size={size || 24}
               color={color}
             />

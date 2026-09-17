@@ -20,7 +20,10 @@ const mapUnit = (doc: any): AdministrativeUnit => ({
   code: doc.clave,
   name: doc.nombre,
   description: doc.descripcion,
+  contactName: doc.titular,
   contactEmail: doc.correoContacto,
+  contactPhone: doc.telefonoContacto,
+  contactExtension: doc.extensionTelefono,
   teamId: doc.teamId,
   active: doc.activo,
 });
@@ -52,6 +55,7 @@ const mapService = (doc: any): ProcedureService => ({
   contactName: doc.titularResponsable,
   contactEmail: doc.correoContacto,
   contactPhone: doc.telefonoContacto,
+  contactExtension: doc.extensionTelefono,
 });
 
 const mapRequirement = (doc: any): Requirement => ({
@@ -85,6 +89,7 @@ export interface ServiceInput {
   contactName?: string;
   contactEmail?: string;
   contactPhone?: string;
+  contactExtension?: string;
 }
 
 export interface ServiceRequirementInput {
@@ -331,6 +336,7 @@ export const adminService = {
       titularResponsable: input.contactName?.trim() || null,
       correoContacto: input.contactEmail?.trim().toLowerCase() || null,
       telefonoContacto: input.contactPhone?.trim() || null,
+      extensionTelefono: input.contactExtension?.trim() || null,
     };
     if (input.id)
       await databases().updateDocument(databaseId, collection, id, data);

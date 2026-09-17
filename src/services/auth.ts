@@ -4,6 +4,7 @@ import {
   APPWRITE_CONFIG,
   getAppwriteAccount,
   getAppwriteDatabases,
+  refreshAppwriteWebSession,
   ID,
   Models,
 } from "./appwrite";
@@ -302,6 +303,7 @@ export const login = async (
   try {
     const account = getAppwriteAccount();
     await account.createEmailPasswordSession(email, password);
+    refreshAppwriteWebSession();
     const user = await account.get();
     userData = await enrichUserWithProfile(mapAppwriteUserToUser(user));
     accessToken = user.$id;
@@ -370,6 +372,7 @@ export const register = async (
     let sessionCreated = false;
     try {
       await account.createEmailPasswordSession(email, password);
+      refreshAppwriteWebSession();
       sessionCreated = true;
       console.log("✅ Sesión creada exitosamente");
     } catch (sessionError: any) {
@@ -395,6 +398,7 @@ export const register = async (
         await new Promise((resolve) => setTimeout(resolve, 1000));
         try {
           await account.createEmailPasswordSession(email, password);
+          refreshAppwriteWebSession();
           sessionCreated = true;
           console.log("✅ Sesión creada en el segundo intento");
         } catch (retryError: any) {
@@ -519,19 +523,9 @@ export const getUser = async (): Promise<UserData | null> => {
     await setUser(userData); // Guardar localmente también
     return userData;
   } catch (appwriteError) {
-    console.log(
-      "Error obteniendo usuario de Appwrite, intentando local:",
-      appwriteError,
-    );
-    // Fallback a datos locales si Appwrite falla
-    try {
-      const userStr = await AsyncStorage.getItem(USER_KEY);
-      if (!userStr) return null;
-      return JSON.parse(userStr) as UserData;
-    } catch (storageError) {
-      console.error("Error getting user:", storageError);
-      return null;
-    }
+    console.log("La sesión de Appwrite ya no es válida:", appwriteError);
+    await AsyncStorage.removeItem(USER_KEY);
+    return null;
   }
 };
 
@@ -543,13 +537,11 @@ export const isAuthenticated = async (): Promise<boolean> => {
     return !!user && !!user.$id;
   } catch (appwriteError) {
     console.log("Error verificando autenticación Appwrite:", appwriteError);
-    // Fallback: verificar si hay usuario guardado localmente
-    try {
-      const userStr = await AsyncStorage.getItem(USER_KEY);
-      return !!userStr;
-    } catch {
-      return false;
-    }
+    // Los datos locales no representan una sesión autorizada en Appwrite.
+    // Mantenerlos permitía entrar al panel, pero todas las consultas se
+    // ejecutaban como invitado después de borrar usuarios o sesiones.
+    await AsyncStorage.removeItem(USER_KEY);
+    return false;
   }
 };
 
