@@ -39,6 +39,7 @@ const limitQuery = encodeURIComponent(
 const collections = [
   "historial_solicitud",
   "documentos_solicitud",
+  "solicitudes_secretaria",
   "solicitudes",
   "folio_contadores",
 ];

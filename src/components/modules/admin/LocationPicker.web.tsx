@@ -128,10 +128,62 @@ export function LocationPicker({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
+  const [manualLatitude, setManualLatitude] = useState(String(latitude));
+  const [manualLongitude, setManualLongitude] = useState(String(longitude));
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
     setMounted(true);
   }, []);
+  const applyManualCoordinates = async () => {
+    const lat = Number(manualLatitude.trim().replace(",", "."));
+    const lon = Number(manualLongitude.trim().replace(",", "."));
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+      setSearchError("Escribe coordenadas numéricas válidas.");
+      return;
+    }
+    if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+      setSearchError(
+        "La latitud debe estar entre -90 y 90, y la longitud entre -180 y 180.",
+      );
+      return;
+    }
+
+    onChange(lat, lon);
+    setSearching(true);
+    setSearchError(null);
+    try {
+      const selected = await reverseNominatim(lat, lon);
+      const place =
+        selected.address?.village ||
+        selected.address?.town ||
+        selected.address?.suburb ||
+        selected.address?.hamlet ||
+        selected.address?.city ||
+        "Ubicación seleccionada";
+      const selectedMunicipality =
+        selected.address?.municipality ||
+        selected.address?.county ||
+        selected.address?.city ||
+        "";
+      setQuery(place);
+      onPlaceSelected(
+        place,
+        selected.display_name,
+        lat,
+        lon,
+        selectedMunicipality,
+      );
+    } catch (cause) {
+      setSearchError(
+        cause instanceof Error
+          ? cause.message
+          : "No fue posible identificar el punto",
+      );
+    } finally {
+      setSearching(false);
+    }
+  };
+
   const search = async () => {
     const term = `${query.trim()}, Tabasco, México`;
     if (!query.trim()) return;
@@ -264,6 +316,8 @@ export function LocationPicker({
                   "";
                 setQuery(place);
                 setResults([]);
+                setManualLatitude(String(lat));
+                setManualLongitude(String(lon));
                 setSearchError(
                   selected.lat && selected.lon
                     ? null
@@ -283,6 +337,38 @@ export function LocationPicker({
           ))}
         </View>
       ) : null}
+      <View className="gap-2 rounded-xl border border-border bg-card p-3">
+        <Text className="text-sm font-semibold">Capturar coordenadas</Text>
+        <View className="flex-row gap-2">
+          <View className="flex-1">
+            <Input
+              value={manualLatitude}
+              onChangeText={setManualLatitude}
+              placeholder="Latitud, ej. 17.9892"
+              keyboardType="numbers-and-punctuation"
+              onSubmitEditing={() => void applyManualCoordinates()}
+            />
+          </View>
+          <View className="flex-1">
+            <Input
+              value={manualLongitude}
+              onChangeText={setManualLongitude}
+              placeholder="Longitud, ej. -92.9475"
+              keyboardType="numbers-and-punctuation"
+              onSubmitEditing={() => void applyManualCoordinates()}
+            />
+          </View>
+          <Button
+            onPress={() => void applyManualCoordinates()}
+            disabled={searching}
+          >
+            <Text>{searching ? "Ubicando..." : "Aplicar"}</Text>
+          </Button>
+        </View>
+        <Text className="text-xs text-muted-foreground">
+          Puedes usar punto o coma como separador decimal.
+        </Text>
+      </View>
       <div
         style={{
           height: 360,
@@ -318,6 +404,8 @@ export function LocationPicker({
             />
             <ClickHandler
               onChange={async (lat, lon) => {
+                setManualLatitude(String(lat));
+                setManualLongitude(String(lon));
                 onChange(lat, lon);
                 setSearching(true);
                 setSearchError(null);

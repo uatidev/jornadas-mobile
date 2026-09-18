@@ -1,4 +1,5 @@
 import { THEME } from "@/src/components/ui/lib/theme";
+import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import Monicon from "@monicon/native";
 import { Tabs } from "expo-router";
@@ -6,6 +7,7 @@ import { Platform, useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
+  const { user } = useAuth();
   const { colorScheme } = useTheme();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -14,6 +16,10 @@ export default function TabsLayout() {
   const borderColor = THEME[colorScheme].border;
   const iconColor = THEME[colorScheme].foreground;
   const activeIconColor = THEME[colorScheme].primary;
+  const canSeeSecretaryTab =
+    user?.role === "secretaria" ||
+    user?.role === "capturista_secretaria" ||
+    user?.role === "enlace";
 
   return (
     <Tabs
@@ -67,7 +73,7 @@ export default function TabsLayout() {
         name="secretaria/index"
         options={{
           title: "Secretaria",
-          href: "/secretaria",
+          href: canSeeSecretaryTab ? "/secretaria" : null,
           tabBarIcon: ({ color, size }) => (
             <Monicon
               name="ci:file-document"
