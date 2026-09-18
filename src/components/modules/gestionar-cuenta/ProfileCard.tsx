@@ -11,6 +11,20 @@ interface ProfileCardProps {
   getInitials: () => string;
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  superadmin: "Superadministrador",
+  super_admin: "Superadministrador",
+  secretaria: "Secretaria",
+  capturistasecretaria: "Representante de la Titular",
+  capturista_secretaria: "Representante de la Titular",
+  enlace: "Enlace de canalización",
+  gestor: "Gestor",
+  capturista: "Capturista",
+  solicitante: "Solicitante",
+};
+
+const getRoleLabel = (role: string) => ROLE_LABELS[role] || role;
+
 export function ProfileCard({ user, getInitials }: ProfileCardProps) {
   const { colorScheme } = useTheme();
   const cardForegroundColor = THEME[colorScheme].cardForeground;
@@ -118,7 +132,7 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
                   className="text-xs font-medium"
                   style={{ color: mutedForegroundColor }}
                 >
-                  {label}
+                  {getRoleLabel(label)}
                 </Text>
               </View>
             ))}
@@ -138,7 +152,7 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
                 className="text-xs font-medium"
                 style={{ color: mutedForegroundColor }}
               >
-                {user.role}
+                {getRoleLabel(user.role)}
               </Text>
             </View>
           </View>

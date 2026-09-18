@@ -29,6 +29,13 @@ export default function IosTabsLayout() {
         <NativeTabs.Trigger.Label>Mis solicitudes</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
 
+      <NativeTabs.Trigger name="secretaria/index">
+        <NativeTabs.Trigger.Icon
+          sf={{ default: "doc.text", selected: "doc.text.fill" }}
+        />
+        <NativeTabs.Trigger.Label>Secretaría</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
+
       <NativeTabs.Trigger name="configuracion/index">
         <NativeTabs.Trigger.Icon
           sf={{ default: "gearshape", selected: "gearshape.fill" }}

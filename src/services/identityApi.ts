@@ -1,6 +1,6 @@
 import { ExecutionMethod } from "react-native-appwrite";
 import { getAppwriteFunctions } from "./appwrite";
-import type { ServiceRequest } from "@/src/types/request";
+import type { SecretaryRequest, SecretaryRequestDocument, SecretaryRequestStatus, ServiceRequest } from "@/src/types/request";
 
 const FUNCTION_ID = "identity-api";
 
@@ -77,6 +77,8 @@ export interface CanalizationReportItem {
 
 export const identityApi = {
   ensureProfile: () => execute({ action: "ensureProfile" }),
+  getServicePopularity: () =>
+    execute<{ counts: Record<string, number> }>({ action: "servicePopularity" }),
   submitRequest: (
     serviceId: string,
     applicantData: unknown,
@@ -127,6 +129,27 @@ export const identityApi = {
     execute<{ items: CanalizationReportItem[] }>({ action: "canalizationReport" }),
   reassignRequest: (requestId: string, unitId: string, comment?: string) =>
     execute({ action: "reassignRequest", requestId, unitId, comment }),
+  submitSecretaryRequest: (data: {
+    applicantData: Record<string, string>;
+    subject: string;
+    source: "gobernador" | "oficina_gubernamental" | "otra";
+    officeNumber?: string;
+    officeDate?: string;
+    notes?: string;
+    route: "secretaria" | "canalizacion";
+    eventId: string;
+    recipientEmail?: string;
+    documents: SecretaryRequestDocument[];
+  }) => execute<{ request: SecretaryRequest; emailSent: boolean; emailMessage: string }>({ action: "submitSecretaryRequest", ...data }),
+  listSecretaryRequests: () =>
+    execute<{ requests: SecretaryRequest[] }>({ action: "listSecretaryRequests" }),
+  listMySecretaryRequests: () =>
+    execute<{ requests: SecretaryRequest[] }>({ action: "listMySecretaryRequests" }),
+  updateSecretaryRequest: (requestId: string, data: {
+    status?: SecretaryRequestStatus;
+    unitId?: string;
+    comment?: string;
+  }) => execute<{ request: SecretaryRequest }>({ action: "updateSecretaryRequest", requestId, ...data }),
   saveAdministrativeUnit: (data: {
     id?: string;
     code: string;

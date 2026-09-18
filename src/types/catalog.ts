@@ -64,6 +64,12 @@ export interface GlobalFormConfiguration {
   active: boolean;
   fields: ServiceFormField[];
   enableINEAnalysis?: boolean;
+  secretaryContact?: {
+    name?: string;
+    email?: string;
+    phone?: string;
+    extension?: string;
+  };
 }
 
 export interface AttentionEvent {

@@ -106,6 +106,12 @@ export default function CapturistaWebDashboard() {
               </Text>
             </View>
           </Pressable>
+          {(user?.role === "secretaria" || user?.role === "capturista_secretaria" || user?.role === "enlace" || user?.role === "gestor") ? (
+            <Pressable onPress={() => router.push("/secretary-requests" as any)} className="mt-2 flex-row items-center gap-3 rounded-xl px-4 py-3 hover:bg-muted">
+              <Monicon name="ci:file-document" size={20} color="#92400e" />
+              <View><Text className="font-semibold">Atención de Secretaria</Text><Text className="mt-1 text-xs text-muted-foreground">Oficios prioritarios</Text></View>
+            </Pressable>
+          ) : null}
 
           <View className="mt-auto border-t border-border pt-5">
             <Text className="font-semibold">{user?.nombre}</Text>
@@ -113,9 +119,9 @@ export default function CapturistaWebDashboard() {
               Rol: {user?.role === "super_admin"
                 ? "Superadministrador"
                 : user?.role === "secretaria"
-                  ? "Secretaría"
+                  ? "Secretaria"
                   : user?.role === "capturista_secretaria"
-                    ? "Capturista de Secretaría"
+                    ? "Representante de la Titular"
                   : user?.role === "enlace"
                     ? "Enlace de canalización"
                     : user?.role === "gestor"

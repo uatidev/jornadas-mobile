@@ -1,7 +1,7 @@
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useRouter } from "expo-router";
 import React, { useEffect } from "react";
-import { ActivityIndicator, Image, View } from "react-native";
+import { ActivityIndicator, Image, Platform, View } from "react-native";
 
 const Splash = () => {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -13,10 +13,10 @@ const Splash = () => {
       const timer = setTimeout(() => {
         if (isAuthenticated) {
           router.replace(
-            user?.role === "super_admin" ||
+            Platform.OS === "web" && (user?.role === "super_admin" ||
             user?.role === "gestor" ||
             user?.role === "enlace" ||
-            user?.role === "secretaria"
+            user?.role === "secretaria")
               ? ("/(protected)/admin" as any)
               : "/(protected)/(tabs)/home",
           );

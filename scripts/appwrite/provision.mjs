@@ -97,7 +97,7 @@ await ensure(
       bucketId: "catalog-images",
       name: "Imágenes de programas y trámites",
       permissions: [
-        read("users"),
+        read("any"),
         create(superAdmin),
         update(superAdmin),
         del(superAdmin),
@@ -112,6 +112,25 @@ await ensure(
     }),
   () => request("GET", "/storage/buckets/catalog-images"),
 );
+
+// Las tarjetas móviles consumen las imágenes mediante URL directa. React
+// Native Image en iOS no adjunta la sesión de Appwrite a esa petición.
+await request("PUT", "/storage/buckets/catalog-images", {
+  name: "Imágenes de programas y trámites",
+  permissions: [
+    read("any"),
+    create(superAdmin),
+    update(superAdmin),
+    del(superAdmin),
+  ],
+  fileSecurity: false,
+  enabled: true,
+  maximumFileSize: 10485760,
+  allowedFileExtensions: ["jpg", "jpeg", "png", "webp"],
+  compression: "gzip",
+  encryption: true,
+  antivirus: true,
+});
 
 await ensure(
   "bucket request-documents",
@@ -177,6 +196,12 @@ const collections = [
     id: "solicitudes",
     name: "Solicitudes",
     permissions: [create(solicitante), create(enlace), create(superAdmin)],
+    documentSecurity: true,
+  },
+  {
+    id: "solicitudes_secretaria",
+    name: "Solicitudes de atención de Secretaria",
+    permissions: [],
     documentSecurity: true,
   },
   {
@@ -368,6 +393,27 @@ const schemas = {
     attr.string("motivoNoContinuidad", 1500, false),
     attr.boolean("apoyoRecibido", false),
   ],
+  solicitudes_secretaria: [
+    attr.string("folio", 40),
+    attr.string("datosSolicitante", 4000),
+    attr.string("asunto", 300),
+    attr.enum("procedencia", ["gobernador", "oficina_gubernamental", "otra"]),
+    attr.string("numeroOficio", 100, false),
+    attr.datetime("fechaOficio", false),
+    attr.string("observaciones", 1000, false),
+    attr.enum("rutaAtencion", ["secretaria", "canalizacion", "canalizada"]),
+    attr.enum("estatus", ["recibida", "en_atencion", "requiere_informacion", "pendiente_canalizacion", "canalizada", "atendida", "cancelada"]),
+    attr.string("capturadoPorUserId", 64),
+    attr.string("capturadoPorNombre", 160),
+    attr.boolean("capturadoEnNombreDeSecretaria", false, false),
+    attr.boolean("prioridadAlta", false, true),
+    attr.string("unidadResponsableId", 64, false),
+    attr.string("eventoAtencionId", 64, false),
+    attr.string("folioEvento", 64, false),
+    attr.string("documentos", 4000, false),
+    attr.datetime("fechaRegistro"),
+    attr.datetime("fechaActualizacion"),
+  ],
   documentos_solicitud: [
     attr.string("solicitudId", 64),
     attr.string("requisitoId", 64, false),
@@ -510,6 +556,10 @@ const indexes = {
       attributes: ["tramiteServicioId", "fechaSolicitud"],
       orders: ["ASC", "DESC"],
     },
+  ],
+  solicitudes_secretaria: [
+    { key: "ruta_estatus_fecha_idx", type: "key", attributes: ["rutaAtencion", "estatus", "fechaRegistro"], orders: ["ASC", "ASC", "DESC"] },
+    { key: "unidad_fecha_idx", type: "key", attributes: ["unidadResponsableId", "fechaRegistro"], orders: ["ASC", "DESC"] },
   ],
   documentos_solicitud: [
     { key: "solicitud_idx", type: "key", attributes: ["solicitudId"] },

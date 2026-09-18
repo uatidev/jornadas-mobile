@@ -47,8 +47,8 @@ export function UserMenu({ user, onLogout }: UserMenuProps) {
   );
   const roleLabels: Record<UserData["role"], string> = {
     super_admin: "Superadministrador",
-    secretaria: "Secretaría",
-    capturista_secretaria: "Capturista de Secretaría",
+    secretaria: "Secretaria",
+    capturista_secretaria: "Representante de la Titular",
     enlace: "Enlace",
     gestor: "Gestor",
     capturista: "Capturista",

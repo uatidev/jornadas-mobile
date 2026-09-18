@@ -13,6 +13,7 @@
     "appwrite:deploy-site": "node scripts/appwrite/deploy-site.mjs",
     "appwrite:grant-secretary": "node scripts/appwrite/grant-secretary-access.mjs",
     "appwrite:add-contact-fields": "node scripts/appwrite/add-contact-fields.mjs",
+    "appwrite:update-catalog-images-access": "node scripts/appwrite/update-catalog-images-access.mjs",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "DARK_MODE=media DARK_MODE=media expo start --android",

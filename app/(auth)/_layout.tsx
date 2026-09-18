@@ -1,5 +1,6 @@
 import { useAuth } from "@/src/providers/AuthProvider";
 import { Redirect, Stack } from "expo-router";
+import { Platform } from "react-native";
 
 export default function AuthLayout() {
   const { isAuthenticated, isLoading, user } = useAuth();
@@ -12,9 +13,9 @@ export default function AuthLayout() {
     return (
       <Redirect
         href={
-          user?.role === "super_admin" ||
+          Platform.OS === "web" && (user?.role === "super_admin" ||
           user?.role === "gestor" ||
-          user?.role === "secretaria"
+          user?.role === "secretaria")
             ? "/(protected)/admin"
             : "/(protected)/(tabs)/home"
         }

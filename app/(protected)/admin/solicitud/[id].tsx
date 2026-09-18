@@ -35,7 +35,7 @@ const displayValue = (value: unknown) => {
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Superadministrador",
-  secretaria: "Secretaría",
+  secretaria: "Secretaria",
   enlace: "Enlace de canalización",
   gestor: "Gestor",
   capturista: "Capturista",

@@ -17,9 +17,10 @@ import { identityApi } from "@/src/services/identityApi";
 import type { RequestReceipt } from "@/src/services/identityApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -66,6 +67,8 @@ export default function NewRequest() {
   const [priorityRequested, setPriorityRequested] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string>();
   const [receipt, setReceipt] = useState<RequestReceipt>();
+  const scrollRef = useRef<ScrollView>(null);
+  const pendingScrollReset = useRef(false);
 
   const globalFields = globalForm?.fields || [];
   const forcedInstitutionalPriority = user?.role === "secretaria" || user?.role === "capturista_secretaria";
@@ -109,6 +112,20 @@ export default function NewRequest() {
     }),
     [title],
   );
+
+  useEffect(() => {
+    pendingScrollReset.current = true;
+    const interaction = InteractionManager.runAfterInteractions(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    });
+    const timer = setTimeout(() => {
+      scrollRef.current?.scrollTo({ y: 0, animated: false });
+    }, 150);
+    return () => {
+      interaction.cancel();
+      clearTimeout(timer);
+    };
+  }, [stage]);
 
   const back = () => {
     if (stage === "intro") return router.back();
@@ -199,6 +216,14 @@ export default function NewRequest() {
           backRoute="/home"
         />
         <ScrollView
+          key={stage}
+          ref={scrollRef}
+          scrollsToTop
+          onContentSizeChange={() => {
+            if (!pendingScrollReset.current) return;
+            scrollRef.current?.scrollTo({ y: 0, animated: false });
+            pendingScrollReset.current = false;
+          }}
           className="flex-1 px-6"
           contentContainerStyle={{ paddingBottom: insets.bottom + 104 }}
         >

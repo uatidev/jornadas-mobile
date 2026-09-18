@@ -150,6 +150,7 @@ export const APPWRITE_CONFIG = {
     TRAMITES_SERVICIOS: "tramites_servicios",
     REQUISITOS: "requisitos",
     SOLICITUDES: "solicitudes",
+    SOLICITUDES_SECRETARIA: "solicitudes_secretaria",
     DOCUMENTOS_SOLICITUD: "documentos_solicitud",
     HISTORIAL_SOLICITUD: "historial_solicitud",
     FOLIO_CONTADORES: "folio_contadores",

@@ -140,7 +140,7 @@ const ROLE_DETAILS = {
     description: "Pertenece a una unidad administrativa para identificar su área. Registra solicitudes y consulta únicamente las que ha capturado, sin permisos de gestión.",
   },
   capturista_secretaria: {
-    title: "Capturista de Secretaría",
+    title: "Representante de la Titular",
     description: "Registra solicitudes en representación de Secretaría. Todas sus capturas se envían automáticamente como prioritarias y no está ligado a una unidad administrativa.",
   },
   gestor: {
@@ -152,7 +152,7 @@ const ROLE_DETAILS = {
     description: "Analiza las solicitudes que una unidad marcó como «no corresponde» y las redirige a la unidad administrativa correcta, conservando el historial del movimiento.",
   },
   secretaria: {
-    title: "Secretaría",
+    title: "Secretaria",
     description: "Consulta la información general, reportes, mapas, solicitudes e historial de los eventos, sin modificar la operación.",
   },
   super_admin: {
@@ -328,6 +328,10 @@ function OperationalSidebar({
         <Text className="mt-1 text-xs text-muted-foreground">{title}</Text>
       </View>
       <View className="gap-2">
+        <Pressable onPress={() => router.push("/secretary-requests" as any)} className="mb-2 flex-row items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 hover:bg-amber-100">
+          <Monicon name="ci:file-document" size={20} color="#92400e" />
+          <View className="flex-1"><Text className="font-semibold text-amber-950">Atención de Secretaria</Text><Text className="mt-1 text-xs text-amber-800">Oficios prioritarios</Text></View>
+        </Pressable>
         {active === "bandeja" ? (
           <>
             <Pressable className={itemClass(true)}>
@@ -1314,6 +1318,10 @@ function SecretaryDashboard() {
           </Text>
         </View>
         <View className="gap-2">
+          <Pressable onPress={() => router.push("/secretary-requests" as any)} className="mb-2 flex-row items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 hover:bg-amber-100">
+            <Monicon name="ci:file-document" size={20} color="#92400e" />
+            <Text className="font-semibold text-amber-950">Atención de Secretaria</Text>
+          </Pressable>
           <Pressable
             onPress={() => router.push("/home" as any)}
             className="mb-2 flex-row items-center gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3 hover:bg-primary/10"
@@ -1348,7 +1356,7 @@ function SecretaryDashboard() {
             <View className="min-w-0 flex-1">
               <Text className="font-semibold" numberOfLines={1}>{user?.nombre}</Text>
               <Text className="mt-1 text-xs text-muted-foreground" numberOfLines={2}>
-                Rol: Secretaría · Consulta general
+                Rol: Secretaria · Consulta general
               </Text>
             </View>
             <SidebarThemeButton />
@@ -1649,6 +1657,7 @@ function SuperAdminDashboard() {
     ServiceFormField[]
   >([]);
   const [ineAnalysisEnabled, setIneAnalysisEnabled] = useState(false);
+  const [secretaryContact, setSecretaryContact] = useState({ name: "", email: "", phone: "", extension: "" });
   const [notice, setNotice] = useState<string | null>(null);
   const units = useQuery({
     queryKey: ["admin", "units"],
@@ -1787,6 +1796,7 @@ function SuperAdminDashboard() {
         ...globalForm.data,
         version: globalForm.data.version + 1,
         enableINEAnalysis: ineAnalysisEnabled,
+        secretaryContact,
         fields: globalFieldsDraft.map((field) => ({
           ...field,
           label: field.label.trim(),
@@ -1842,6 +1852,12 @@ function SuperAdminDashboard() {
   };
   const openGlobalForm = () => {
     setIneAnalysisEnabled(Boolean(globalForm.data?.enableINEAnalysis));
+    setSecretaryContact({
+      name: globalForm.data?.secretaryContact?.name || "",
+      email: globalForm.data?.secretaryContact?.email || "",
+      phone: globalForm.data?.secretaryContact?.phone || "",
+      extension: globalForm.data?.secretaryContact?.extension || "",
+    });
     setGlobalFieldsDraft(
       (globalForm.data?.fields || []).map((field, index) => ({
         ...field,
@@ -2086,6 +2102,18 @@ function SuperAdminDashboard() {
                     <Text className="mt-2 text-sm text-muted-foreground">
                       {`Estos campos se presentan en todos los trámites antes del formulario específico. Versión actual: ${globalForm.data?.version || 1}.`}
                     </Text>
+                  </View>
+                  <View className="gap-4 rounded-xl border border-primary/20 bg-primary/5 p-5">
+                    <View>
+                      <Text className="font-bold">Contacto de Secretaría</Text>
+                      <Text className="mt-1 text-xs text-muted-foreground">Esta información aparecerá en los comprobantes enviados por correo.</Text>
+                    </View>
+                    <Field label="Nombre o área responsable" value={secretaryContact.name} onChangeText={(name) => setSecretaryContact((current) => ({ ...current, name }))} placeholder="Ej. Oficina de la Titular" />
+                    <View className="grid grid-cols-2 gap-4">
+                      <Field label="Correo de contacto" value={secretaryContact.email} onChangeText={(email) => setSecretaryContact((current) => ({ ...current, email }))} placeholder="secretaria@tabasco.gob.mx" />
+                      <Field label="Teléfono" value={secretaryContact.phone} onChangeText={(phone) => setSecretaryContact((current) => ({ ...current, phone }))} placeholder="993 000 0000" />
+                    </View>
+                    <Field label="Extensión (opcional)" value={secretaryContact.extension} onChangeText={(extension) => setSecretaryContact((current) => ({ ...current, extension }))} placeholder="1234" />
                   </View>
                   <View className="flex-row items-center justify-between rounded-xl border border-border bg-background p-4">
                     <View className="flex-1 pr-6">

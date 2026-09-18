@@ -145,6 +145,7 @@ export const catalogService = {
       active: doc.activo,
       fields: parsed.fields || [],
       enableINEAnalysis: Boolean(parsed.enableINEAnalysis),
+      secretaryContact: parsed.secretaryContact || {},
     };
   },
 

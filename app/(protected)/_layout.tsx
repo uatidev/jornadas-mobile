@@ -47,6 +47,7 @@ export default function ProtectedLayout() {
           options={{ headerShown: false }}
         />
         <Stack.Screen name="admin" options={{ headerShown: false }} />
+        <Stack.Screen name="secretary-requests" options={{ headerShown: false }} />
     </Stack>
   );
 }

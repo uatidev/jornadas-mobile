@@ -1,6 +1,5 @@
 import { Platform } from "react-native";
 import { File as ExpoFile } from "expo-file-system";
-import { Permission, Role } from "react-native-appwrite";
 import {
   APPWRITE_CONFIG,
   getAppwriteConfig,
@@ -91,21 +90,10 @@ class FilesService {
             : fileData;
 
         try {
-          const permissions = bucketType === "request_documents"
-            ? [
-                Permission.read(Role.label("superadmin")),
-                Permission.read(Role.label("secretaria")),
-                Permission.read(Role.label("capturistasecretaria")),
-                Permission.read(Role.label("gestor")),
-                Permission.read(Role.label("enlace")),
-                Permission.read(Role.label("capturista")),
-              ]
-            : undefined;
           response = await storage.createFile(
             bucketId,
             fileId,
             fileToUpload as any,
-            permissions,
           );
         } catch (createFileError: any) {
           throw createFileError;

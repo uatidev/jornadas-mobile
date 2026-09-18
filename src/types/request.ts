@@ -34,3 +34,37 @@ export interface RequestHistoryEntry {
   performedByUserId: string;
   date: string;
 }
+
+export type SecretaryRequestRoute = "secretaria" | "canalizacion" | "canalizada";
+export type SecretaryRequestStatus = "recibida" | "en_atencion" | "requiere_informacion" | "pendiente_canalizacion" | "canalizada" | "atendida" | "cancelada";
+
+export interface SecretaryRequestDocument {
+  fileId: string;
+  name: string;
+  type: string;
+  size?: number;
+  url?: string;
+}
+
+export interface SecretaryRequest {
+  id: string;
+  folio: string;
+  applicantData: Record<string, string>;
+  subject: string;
+  source: "gobernador" | "oficina_gubernamental" | "otra";
+  officeNumber?: string;
+  officeDate?: string;
+  notes?: string;
+  route: SecretaryRequestRoute;
+  status: SecretaryRequestStatus;
+  capturedByUserId: string;
+  capturedByName: string;
+  capturedOnBehalfOfSecretary: boolean;
+  highPriority: boolean;
+  responsibleUnitId?: string;
+  eventId?: string;
+  eventFolio?: string;
+  documents: SecretaryRequestDocument[];
+  createdAt: string;
+  updatedAt: string;
+}

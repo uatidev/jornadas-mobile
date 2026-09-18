@@ -64,6 +64,20 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="secretaria/index"
+        options={{
+          title: "Secretaria",
+          href: "/secretaria",
+          tabBarIcon: ({ color, size }) => (
+            <Monicon
+              name="ci:file-document"
+              size={size || 24}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="configuracion/index"
         options={{
           title: "Configuración",

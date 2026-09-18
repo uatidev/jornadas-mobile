@@ -164,6 +164,7 @@ export const adminService = {
     let config: {
       fields?: ServiceFormField[];
       enableINEAnalysis?: boolean;
+      secretaryContact?: GlobalFormConfiguration["secretaryContact"];
     } = {};
     try {
       config = JSON.parse(doc.campos);
@@ -177,6 +178,7 @@ export const adminService = {
       active: doc.activo,
       fields: config.fields || [],
       enableINEAnalysis: Boolean(config.enableINEAnalysis),
+      secretaryContact: config.secretaryContact || {},
     };
   },
 
@@ -188,6 +190,7 @@ export const adminService = {
       campos: JSON.stringify({
         fields: input.fields,
         enableINEAnalysis: Boolean(input.enableINEAnalysis),
+        secretaryContact: input.secretaryContact || {},
       }),
     };
     return input.id

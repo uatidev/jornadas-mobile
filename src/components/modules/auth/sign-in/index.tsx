@@ -12,7 +12,6 @@ import { Label } from "@/src/components/ui/label";
 import { Text } from "@/src/components/ui/text";
 import { useSignInForm } from "@/src/forms/useSignInForm";
 import { Monicon } from "@monicon/native";
-import { Link } from "expo-router";
 import { AlertCircleIcon } from "lucide-react-native";
 import { Controller } from "react-hook-form";
 import {
@@ -139,13 +138,13 @@ export function SignInForm() {
                 </Text>
               )}
             </View>
-            <View className="flex-row justify-end">
+            {/* <View className="flex-row justify-end">
               <Link href="/(auth)/forgot-password" asChild>
                 <Text className="text-sm text-primary font-medium">
                   ¿Olvidaste tu contraseña?
                 </Text>
               </Link>
-            </View>
+            </View> */}
             <Button
               className="w-full"
               onPress={handleSubmit}
@@ -153,7 +152,7 @@ export function SignInForm() {
             >
               <Text>{isLoading ? "Iniciando sesión..." : "Continuar"}</Text>
             </Button>
-            <View className="flex-row justify-center items-center gap-1">
+            {/* <View className="flex-row justify-center items-center gap-1">
               <Text className="text-sm text-muted-foreground">
                 ¿No tienes una cuenta?
               </Text>
@@ -162,7 +161,7 @@ export function SignInForm() {
                   Regístrate
                 </Text>
               </Link>
-            </View>
+            </View> */}
           </View>
         </CardContent>
       </Card>

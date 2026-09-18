@@ -21,8 +21,6 @@ const sendRequestConfirmation = async ({
   event,
   requestedAt,
   attendedBy,
-  applicantData,
-  requestData,
 }) => {
   const host = process.env.SMTP_HOST;
   const user = process.env.SMTP_USER;
@@ -68,11 +66,6 @@ const sendRequestConfirmation = async ({
     `Correo: ${service.correoContacto || "No especificado"}`,
     `Teléfono: ${service.telefonoContacto || "No especificado"}${service.extensionTelefono ? ` ext. ${service.extensionTelefono}` : ""}`,
     "",
-    "DATOS CAPTURADOS",
-    ...Object.entries({ ...(applicantData || {}), ...(requestData || {}) })
-      .filter(([key, value]) => !key.startsWith("__") && value !== undefined && value !== null && String(value).trim())
-      .map(([key, value]) => `${key}: ${String(value)}`),
-    "",
     "Conserva este correo para dar seguimiento a tu solicitud.",
   ];
   await transporter.sendMail({
@@ -83,6 +76,45 @@ const sendRequestConfirmation = async ({
     to,
     subject: `Solicitud registrada · ${folio}`,
     text: lines.join("\n"),
+  });
+  return { sent: true };
+};
+
+const sendSecretaryConfirmation = async ({ to, folio, eventFolio, subject, event, requestedAt, contact }) => {
+  const host = process.env.SMTP_HOST;
+  const user = process.env.SMTP_USER;
+  const password = process.env.SMTP_PASSWORD;
+  const fromEmail = process.env.SMTP_FROM_EMAIL;
+  if (!host || !user || !password || !fromEmail)
+    return { sent: false, reason: "SMTP no configurado" };
+  const transporter = nodemailer.createTransport({
+    host,
+    port: Number(process.env.SMTP_PORT || 587),
+    secure: String(process.env.SMTP_SECURE || "").toLowerCase() === "true" || Number(process.env.SMTP_PORT) === 465,
+    auth: { user, pass: password },
+  });
+  await transporter.sendMail({
+    from: { name: process.env.SMTP_FROM_NAME || "Jornadas de Atención", address: fromEmail },
+    to,
+    subject: `Atención de Secretaría registrada · ${folio}`,
+    text: [
+      "COMPROBANTE DE ATENCIÓN DE SECRETARÍA",
+      "Tu solicitud fue registrada correctamente.",
+      "",
+      `Folio de la solicitud: ${folio}`,
+      `Folio del evento: ${eventFolio || "No disponible"}`,
+      `Asunto: ${subject}`,
+      `Evento: ${event?.nombre || "No disponible"}`,
+      `Sede: ${event?.sede || "No especificada"}`,
+      `Fecha y hora: ${requestedAt.toLocaleString("es-MX", { timeZone: "America/Mexico_City" })}`,
+      "",
+      "CONTACTO DE SECRETARÍA",
+      `Responsable: ${contact?.name || "No especificado"}`,
+      `Correo: ${contact?.email || "No especificado"}`,
+      `Teléfono: ${contact?.phone || "No especificado"}${contact?.extension ? ` ext. ${contact.extension}` : ""}`,
+      "",
+      "Conserva este correo y tu folio para dar seguimiento a la solicitud.",
+    ].join("\n"),
   });
   return { sent: true };
 };
@@ -281,6 +313,191 @@ export default async ({ req, res, log, error }) => {
       }
     }
 
+    const mapSecretaryRequest = (item) => {
+      const parse = (value, fallback) => {
+        try { return JSON.parse(value || ""); } catch { return fallback; }
+      };
+      return {
+        id: item.$id,
+        folio: item.folio,
+        applicantData: parse(item.datosSolicitante, {}),
+        subject: item.asunto,
+        source: item.procedencia,
+        officeNumber: item.numeroOficio,
+        officeDate: item.fechaOficio,
+        notes: item.observaciones,
+        route: item.rutaAtencion,
+        status: item.estatus,
+        capturedByUserId: item.capturadoPorUserId,
+        capturedByName: item.capturadoPorNombre,
+        capturedOnBehalfOfSecretary: Boolean(item.capturadoEnNombreDeSecretaria),
+        highPriority: Boolean(item.prioridadAlta),
+        responsibleUnitId: item.unidadResponsableId,
+        eventId: item.eventoAtencionId,
+        eventFolio: item.folioEvento,
+        documents: parse(item.documentos, []),
+        createdAt: item.fechaRegistro,
+        updatedAt: item.fechaActualizacion,
+      };
+    };
+
+    if (input.action === "servicePopularity") {
+      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [5000] }))}`);
+      const counts = (result.documents || []).reduce((summary, request) => {
+        const serviceId = request.tramiteServicioId;
+        if (serviceId) summary[serviceId] = (summary[serviceId] || 0) + 1;
+        return summary;
+      }, {});
+      return json(200, { counts });
+    }
+
+    if (input.action === "submitSecretaryRequest") {
+      if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace"].includes(profile.rolSistema))
+        return json(403, { message: "Solo Secretaria, Representante de la Titular o Enlace de canalización pueden registrar esta solicitud" });
+      if (!String(input.subject || "").trim()) return json(400, { message: "El asunto es obligatorio" });
+      if (!["gobernador", "oficina_gubernamental", "otra"].includes(input.source))
+        return json(400, { message: "Selecciona una procedencia válida" });
+      if (!["secretaria", "canalizacion"].includes(input.route))
+        return json(400, { message: "Selecciona quién atenderá la solicitud" });
+      if (!String(input.eventId || "").trim())
+        return json(400, { message: "Selecciona un evento de atención" });
+      const stamp = new Date().toISOString();
+      const event = await call("GET", `/databases/${DATABASE_ID}/collections/eventos_atencion/documents/${input.eventId}`);
+      const now = new Date(stamp).getTime();
+      if (!event.activo || now < new Date(event.fechaInicio).getTime() || now > new Date(event.fechaFin).getTime())
+        return json(409, { message: "El evento de atención ya no está activo" });
+      const folioNumber = await nextFolioNumber("solicitud-secretaria");
+      const folio = `SEC-${String(folioNumber).padStart(6, "0")}`;
+      const permissions = [
+        `read(\"label:superadmin\")`, `update(\"label:superadmin\")`,
+        `read(\"label:secretaria\")`, `update(\"label:secretaria\")`,
+        `read(\"label:capturistasecretaria\")`, `update(\"label:capturistasecretaria\")`,
+        `read(\"label:enlace\")`, `update(\"label:enlace\")`,
+      ];
+      const created = await call("POST", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents`, {
+        documentId: "unique()",
+        permissions,
+        data: {
+          folio,
+          datosSolicitante: JSON.stringify(input.applicantData || {}),
+          asunto: String(input.subject).trim(),
+          procedencia: input.source,
+          ...(input.officeNumber ? { numeroOficio: String(input.officeNumber).trim() } : {}),
+          ...(input.officeDate ? { fechaOficio: new Date(input.officeDate).toISOString() } : {}),
+          ...(input.notes ? { observaciones: String(input.notes).trim() } : {}),
+          rutaAtencion: input.route,
+          estatus: input.route === "secretaria" ? "recibida" : "pendiente_canalizacion",
+          capturadoPorUserId: userId,
+          capturadoPorNombre: profile.nombre || account.name || account.email,
+          capturadoEnNombreDeSecretaria: ["capturista_secretaria", "enlace"].includes(profile.rolSistema),
+          prioridadAlta: true,
+          eventoAtencionId: event.$id,
+          folioEvento: event.prefijoFolio || event.claveMunicipio,
+          documentos: JSON.stringify(Array.isArray(input.documents) ? input.documents : []),
+          fechaRegistro: stamp,
+          fechaActualizacion: stamp,
+        },
+      });
+      const suppliedRecipient = String(input.recipientEmail || "").trim().toLowerCase();
+      const recipient = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(suppliedRecipient)
+        ? suppliedRecipient
+        : findApplicantEmail(input.applicantData);
+      let secretaryContact = {};
+      try {
+        const formConfigurations = await call("GET", `/databases/${DATABASE_ID}/collections/configuracion_formulario_global/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [100] }))}`);
+        const activeFormConfiguration = (formConfigurations.documents || [])
+          .filter((item) => item.activo)
+          .sort((a, b) => Number(b.version || 0) - Number(a.version || 0))[0];
+        secretaryContact = JSON.parse(activeFormConfiguration?.campos || "{}").secretaryContact || {};
+      } catch {
+        secretaryContact = {};
+      }
+      let emailResult = { sent: false, reason: recipient ? "No se intentó el envío" : "La solicitud no contiene un correo válido" };
+      if (recipient) {
+        try {
+          emailResult = await sendSecretaryConfirmation({
+            to: recipient,
+            folio,
+            eventFolio: event.prefijoFolio || event.claveMunicipio,
+            subject: String(input.subject).trim(),
+            event,
+            requestedAt: new Date(stamp),
+            contact: secretaryContact,
+          });
+        } catch (cause) {
+          emailResult = { sent: false, reason: cause.message || "No fue posible enviar el correo" };
+          error(`secretary-email-confirmation ${folio}: ${emailResult.reason}`);
+        }
+      }
+      return json(201, {
+        request: mapSecretaryRequest(created),
+        emailSent: emailResult.sent,
+        emailMessage: emailResult.sent ? "Comprobante enviado por correo" : emailResult.reason,
+      });
+    }
+
+    if (input.action === "listSecretaryRequests") {
+      if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace", "gestor"].includes(profile.rolSistema))
+        return json(403, { message: "No tienes acceso a solicitudes de Secretaria" });
+      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`);
+      let requests = result.documents || [];
+      if (profile.rolSistema === "enlace")
+        requests = requests.filter((item) => ["canalizacion", "canalizada"].includes(item.rutaAtencion));
+      if (profile.rolSistema === "gestor")
+        requests = requests.filter((item) => item.unidadResponsableId === profile.unidadAdministrativaId);
+      requests.sort((a, b) => new Date(b.fechaRegistro).getTime() - new Date(a.fechaRegistro).getTime());
+      return json(200, { requests: requests.map(mapSecretaryRequest) });
+    }
+
+    if (input.action === "listMySecretaryRequests") {
+      if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace", "gestor"].includes(profile.rolSistema))
+        return json(403, { message: "No tienes acceso a solicitudes de Secretaria" });
+      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`);
+      const requests = (result.documents || [])
+        .filter((item) => item.capturadoPorUserId === userId)
+        .sort((a, b) => new Date(b.fechaRegistro).getTime() - new Date(a.fechaRegistro).getTime());
+      return json(200, { requests: requests.map(mapSecretaryRequest) });
+    }
+
+    if (input.action === "updateSecretaryRequest") {
+      if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace", "gestor"].includes(profile.rolSistema))
+        return json(403, { message: "No tienes permisos para actualizar esta solicitud" });
+      const current = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${input.requestId}`);
+      const data = { fechaActualizacion: new Date().toISOString() };
+      let permissions;
+      if (input.unitId) {
+        if (!isSuperAdmin && profile.rolSistema !== "enlace")
+          return json(403, { message: "Solo el Enlace puede definir el área responsable" });
+        const unit = await call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${input.unitId}`);
+        data.unidadResponsableId = unit.$id;
+        data.rutaAtencion = "canalizada";
+        data.estatus = "canalizada";
+        data.observaciones = String(input.comment || `Canalizada a ${unit.nombre}`).trim();
+        permissions = [
+          `read(\"label:superadmin\")`, `update(\"label:superadmin\")`,
+          `read(\"label:secretaria\")`, `update(\"label:secretaria\")`,
+          `read(\"label:capturistasecretaria\")`, `update(\"label:capturistasecretaria\")`,
+          `read(\"label:enlace\")`, `update(\"label:enlace\")`,
+          `read(\"team:${unit.teamId}\")`, `update(\"team:${unit.teamId}\")`,
+        ];
+      } else if (input.status) {
+        const allowed = ["recibida", "en_atencion", "requiere_informacion", "atendida", "cancelada"];
+        if (!allowed.includes(input.status)) return json(400, { message: "Estatus no permitido" });
+        const directRequest = current.rutaAtencion === "secretaria";
+        if (input.status === "atendida" && directRequest && !isSuperAdmin && profile.rolSistema !== "secretaria")
+          return json(403, { message: "El cierre definitivo corresponde a Secretaria" });
+        if (profile.rolSistema === "gestor" && current.unidadResponsableId !== profile.unidadAdministrativaId)
+          return json(403, { message: "La solicitud no pertenece a tu área" });
+        data.estatus = input.status;
+        if (input.comment) data.observaciones = String(input.comment).trim();
+      }
+      const updated = await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${current.$id}`, {
+        data,
+        ...(permissions ? { permissions } : {}),
+      });
+      return json(200, { request: mapSecretaryRequest(updated) });
+    }
+
     if (input.action === "submitRequest") {
       if (
         !isSuperAdmin &&
@@ -422,8 +639,6 @@ export default async ({ req, res, log, error }) => {
             event,
             requestedAt: stamp,
             attendedBy: profile.nombre || account.name || account.email,
-            applicantData: input.applicantData,
-            requestData: input.requestData,
           });
         } catch (cause) {
           emailResult = {
