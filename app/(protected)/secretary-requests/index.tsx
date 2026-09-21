@@ -95,7 +95,9 @@ export default function SecretaryRequestsScreen() {
     user?.role === "enlace" ||
     (Platform.OS === "web" && user?.role === "gestor");
   const allowed = canCreate || canManageOnThisPlatform;
-  const [section, setSection] = useState<"new" | "queue">(canCreate ? "new" : "queue");
+  const [section, setSection] = useState<"new" | "queue">(
+    user?.role === "enlace" || !canCreate ? "queue" : "new",
+  );
   const [applicantData, setApplicantData] = useState<Record<string, string>>({});
   const [selectedEventId, setSelectedEventId] = useState("");
   const [subject, setSubject] = useState("");
@@ -119,8 +121,9 @@ export default function SecretaryRequestsScreen() {
   const globalDocuments = globalFields.flatMap((field) => {
     if (field.type !== "file" || !applicantData[field.key]) return [];
     try {
-      const document = JSON.parse(applicantData[field.key]) as SecretaryRequestDocument;
-      return document.fileId ? [document] : [];
+      const parsed = JSON.parse(applicantData[field.key]) as SecretaryRequestDocument | SecretaryRequestDocument[];
+      const fieldDocuments = Array.isArray(parsed) ? parsed : [parsed];
+      return fieldDocuments.filter((document) => Boolean(document?.fileId));
     } catch {
       return [];
     }
@@ -136,7 +139,14 @@ export default function SecretaryRequestsScreen() {
     return field ? applicantData[field.key]?.trim() : undefined;
   })();
 
-  const queue = useQuery({ queryKey: ["secretary-requests", user?.role], queryFn: identityApi.listSecretaryRequests, enabled: allowed && section === "queue" });
+  const queue = useQuery({
+    queryKey: ["secretary-requests", user?.role],
+    queryFn: identityApi.listSecretaryRequests,
+    enabled: allowed && section === "queue",
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: section === "queue" ? 10_000 : false,
+  });
   const submit = useMutation({
     mutationFn: () => identityApi.submitSecretaryRequest({ applicantData, subject, source, officeNumber, officeDate, notes, route, eventId: effectiveEventId, recipientEmail, documents: requestDocuments }),
     onSuccess: async ({ request, emailMessage }) => {
@@ -174,7 +184,7 @@ export default function SecretaryRequestsScreen() {
   });
   if (!allowed) return <Redirect href="/home" />;
 
-  const upload = async (file: File | { uri: string; name: string; type: string }) => {
+  const upload = async (file: File | { uri: string; name: string; type: string; size?: number }) => {
     setUploading(true);
     setUploadError(undefined);
     try { const item = await filesService.uploadImage(file, "request_documents"); setDocuments((current) => [...current, { fileId: item.filename, name: item.originalname, type: item.mimetype, size: item.size, url: item.url }]); }
@@ -183,13 +193,13 @@ export default function SecretaryRequestsScreen() {
   };
   const pickDocument = async () => {
     const result = await DocumentPicker.getDocumentAsync({ type: ["application/pdf", "image/*"], copyToCacheDirectory: true });
-    if (!result.canceled && result.assets[0]) { const asset = result.assets[0]; await upload(asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" }); }
+    if (!result.canceled && result.assets[0]) { const asset = result.assets[0]; await upload(asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream", size: asset.size }); }
   };
   const takePhoto = async () => {
     const permission = await ImagePicker.requestCameraPermissionsAsync();
     if (!permission.granted) return;
     const result = await ImagePicker.launchCameraAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.85 });
-    if (!result.canceled && result.assets[0]) { const asset = result.assets[0]; await upload(asset.file || { uri: asset.uri, name: asset.fileName || `oficio-${Date.now()}.jpg`, type: asset.mimeType || "image/jpeg" }); }
+    if (!result.canceled && result.assets[0]) { const asset = result.assets[0]; await upload(asset.file || { uri: asset.uri, name: asset.fileName || `oficio-${Date.now()}.jpg`, type: asset.mimeType || "image/jpeg", size: asset.fileSize }); }
   };
   const valid = effectiveEventId && subject.trim() && isDynamicFormComplete(globalFields, applicantData);
 

@@ -77,12 +77,14 @@ const DEFAULT_SERVICE_IMAGE = require("@/src/assets/images/logo-turismo.png");
 
 type Section =
   | "resumen"
+  | "reportes"
   | "formulario"
   | "eventos"
   | "unidades"
   | "tramites"
   | "usuarios"
-  | "solicitudes";
+  | "solicitudes"
+  | "correos";
 type SecretarySection = "resumen" | "eventos" | "reporte" | "solicitudes";
 const EMPTY: ServiceInput = {
   unitId: "",
@@ -120,12 +122,14 @@ const EMPTY_EVENT: AttentionEventInput = {
 
 const nav: { key: Section; label: string; icon: string }[] = [
   { key: "resumen", label: "Resumen", icon: "ci:chart-pie" },
+  { key: "reportes", label: "Reporte por evento", icon: "ci:file-document" },
   { key: "formulario", label: "Formulario global", icon: "ci:note-edit" },
   { key: "eventos", label: "Eventos de atención", icon: "ci:calendar-event" },
   { key: "unidades", label: "Unidades", icon: "ci:building-03" },
   { key: "tramites", label: "Trámites y servicios", icon: "ci:list-checklist" },
   { key: "usuarios", label: "Usuarios y enlaces", icon: "ci:users-group" },
   { key: "solicitudes", label: "Solicitudes", icon: "ci:file-document" },
+  { key: "correos", label: "Correos enviados", icon: "ci:mail" },
 ];
 const secretaryNav: { key: SecretarySection; label: string; icon: string }[] = [
   { key: "resumen", label: "Dashboard general", icon: "ci:chart-pie" },
@@ -533,6 +537,8 @@ function GestorDashboard() {
     }>
   >({});
   const [notice, setNotice] = useState<string | null>(null);
+  const [exhibitionSearch, setExhibitionSearch] = useState("");
+  const [exhibitionEventId, setExhibitionEventId] = useState("");
   const [reassignmentReasons, setReassignmentReasons] = useState<Record<string, string>>({});
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState("");
@@ -855,6 +861,12 @@ function EnlaceDashboard() {
     queryKey: ["enlace", "reassignment-queue"],
     queryFn: identityApi.listReassignmentQueue,
   });
+  const secretaryQueue = useQuery({
+    queryKey: ["enlace", "secretary-requests"],
+    queryFn: identityApi.listSecretaryRequests,
+    refetchOnWindowFocus: true,
+    refetchInterval: 10_000,
+  });
   const report = useQuery({
     queryKey: ["enlace", "canalization-report"],
     queryFn: identityApi.getCanalizationReport,
@@ -880,6 +892,30 @@ function EnlaceDashboard() {
     ])),
     [services.data],
   );
+  const canalizationRows = useMemo(() => [
+    ...(secretaryQueue.data?.requests || [])
+      .filter((request) => request.status === "pendiente_canalizacion")
+      .map((request) => ({
+        id: request.id,
+        source: "secretaria" as const,
+        folio: request.folio,
+        eventFolio: request.eventFolio || "—",
+        eventName: request.eventId ? eventsById[request.eventId]?.name || "Evento no disponible" : "Sin evento",
+        date: request.createdAt,
+        requestType: "Solicitud de Secretaría",
+        service: request.subject || "Atención prioritaria",
+      })),
+    ...(queue.data?.requests || []).map((request) => ({
+      id: request.id,
+      source: "regular" as const,
+      folio: request.folio,
+      eventFolio: request.eventFolio || "—",
+      eventName: request.eventId ? eventsById[request.eventId]?.name || "Evento no disponible" : "Sin evento",
+      date: request.requestedAt,
+      requestType: "Trámite o servicio",
+      service: serviceNames[request.serviceId] || "Trámite no disponible",
+    })),
+  ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()), [eventsById, queue.data?.requests, secretaryQueue.data?.requests, serviceNames]);
   const reportItems = report.data?.items || [];
   const pendingCount = reportItems.filter((item) => item.pending).length;
   const resolvedItems = reportItems.filter((item) => !item.pending);
@@ -912,6 +948,15 @@ function EnlaceDashboard() {
     },
     onError: (cause: Error) => setNotice(cause.message),
   });
+  const canalizeSecretaryRequest = useMutation({
+    mutationFn: ({ requestId, unitId }: { requestId: string; unitId: string }) =>
+      identityApi.updateSecretaryRequest(requestId, { unitId, comment: comments[requestId] }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["enlace", "secretary-requests"] });
+      setNotice("Solicitud de Secretaría canalizada correctamente a la unidad responsable.");
+    },
+    onError: (cause: Error) => setNotice(cause.message),
+  });
 
   return (
     <View className="h-screen flex-row bg-muted/30">
@@ -934,8 +979,70 @@ function EnlaceDashboard() {
                 <Text className="mt-1 text-muted-foreground">Lee el motivo y los datos del expediente, identifica la unidad competente y canaliza la solicitud. El movimiento queda registrado en el historial.</Text>
               </View>
               {notice ? <Text className="rounded-xl bg-primary/10 p-3 text-primary">{notice}</Text> : null}
-              {queue.isLoading || units.isLoading || services.isLoading || events.isLoading || globalForm.isLoading ? <ActivityIndicator color="#981646" /> : null}
-              {(queue.data?.requests || []).map((request) => (
+              {secretaryQueue.error ? <Text className="rounded-xl bg-destructive/10 p-3 text-destructive">No fue posible cargar las solicitudes de Secretaría: {secretaryQueue.error.message}</Text> : null}
+              {queue.isLoading || secretaryQueue.isLoading || units.isLoading || services.isLoading || events.isLoading || globalForm.isLoading ? <ActivityIndicator color="#981646" /> : null}
+              <AdminDataTable
+                data={canalizationRows}
+                getRowId={(item) => `${item.source}-${item.id}`}
+                searchPlaceholder="Buscar por folio, evento o trámite..."
+                filterLabel="Todos los tipos"
+                filterOptions={[{ label: "Solicitudes de Secretaría", value: "secretaria" }, { label: "Trámites y servicios", value: "regular" }]}
+                getFilterValue={(item) => item.source}
+                emptyMessage="No hay solicitudes pendientes de canalización."
+                columns={[
+                  { key: "folio", title: "FOLIO", value: (item) => item.folio, width: 145, render: (item) => <Text className="font-semibold text-primary">{item.folio}</Text> },
+                  { key: "eventFolio", title: "FOLIO EVENTO", value: (item) => item.eventFolio, width: 145 },
+                  { key: "event", title: "EVENTO", value: (item) => item.eventName, width: 210 },
+                  { key: "date", title: "FECHA", value: (item) => new Date(item.date).getTime(), width: 135, render: (item) => <Text>{new Date(item.date).toLocaleDateString("es-MX")}</Text> },
+                  { key: "type", title: "TIPO", value: (item) => item.requestType, width: 190 },
+                  { key: "service", title: "TRÁMITE / SERVICIO", value: (item) => item.service, width: 260 },
+                ]}
+                renderActions={(item) => (
+                  <Button size="sm" variant="outline" onPress={() => router.push((item.source === "secretaria" ? `/admin/solicitud-secretaria/${item.id}` : `/admin/solicitud/${item.id}`) as any)}>
+                    <Text>Ver detalle</Text>
+                  </Button>
+                )}
+              />
+              {false && (secretaryQueue.data?.requests || []).filter((request) => request.status === "pendiente_canalizacion").map((request) => (
+                <View key={request.id} className="gap-4 rounded-2xl border border-primary/30 bg-card p-5">
+                  <View className="flex-row justify-between gap-4">
+                    <View className="flex-1">
+                      <Text className="text-xs font-bold uppercase tracking-wider text-primary">Solicitud enviada por Secretaría</Text>
+                      <Text className="mt-1 text-lg font-bold">{request.folio}</Text>
+                      <Text className="mt-1 font-semibold">{request.subject}</Text>
+                      <Text className="mt-1 text-sm text-muted-foreground">Capturó: {request.capturedByName}</Text>
+                    </View>
+                    <Text className="font-semibold text-amber-700">Pendiente de canalización</Text>
+                  </View>
+                  {request.notes ? <View className="rounded-xl bg-amber-50 p-4"><Text className="text-xs font-bold text-amber-900">OBSERVACIONES</Text><Text className="mt-1 text-amber-900">{request.notes}</Text></View> : null}
+                  <View className="grid grid-cols-2 gap-4 max-lg:grid-cols-1">
+                    <View className="rounded-xl border border-border p-4">
+                      <Text className="mb-3 font-bold">Datos de la persona solicitante</Text>
+                      {Object.entries(request.applicantData || {}).map(([key, value]) => (
+                        <Text key={key} className="mb-1 text-sm"><Text className="font-semibold">{applicantFieldLabels[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}:</Text> {formatRequestValue(value)}</Text>
+                      ))}
+                    </View>
+                    <View className="gap-3 rounded-xl border border-border p-4">
+                      <Text className="font-bold">Canalizar a</Text>
+                      <select
+                        value={destinations[request.id] || ""}
+                        onChange={(event) => setDestinations((current) => ({ ...current, [request.id]: event.currentTarget.value }))}
+                        className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2"
+                      >
+                        <option value="">Selecciona la unidad responsable</option>
+                        {(units.data || []).filter((unit) => unit.active).map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                      </select>
+                      <Field label="Criterio de canalización" value={comments[request.id] || ""} onChangeText={(comment) => setComments((current) => ({ ...current, [request.id]: comment }))} placeholder="Motivo para asignarla a esta unidad" />
+                      <View className="items-end">
+                        <Button disabled={!destinations[request.id] || canalizeSecretaryRequest.isPending} onPress={() => canalizeSecretaryRequest.mutate({ requestId: request.id, unitId: destinations[request.id] })}>
+                          <Text>{canalizeSecretaryRequest.isPending ? "Canalizando..." : "Confirmar canalización"}</Text>
+                        </Button>
+                      </View>
+                    </View>
+                  </View>
+                </View>
+              ))}
+              {false && (queue.data?.requests || []).map((request) => (
                 <View key={request.id} className="gap-4 rounded-2xl border border-border bg-card p-5">
                   <View className="flex-row justify-between gap-4">
                     <View className="flex-1">
@@ -1009,7 +1116,6 @@ function EnlaceDashboard() {
                   </View>
                 </View>
               ))}
-              {!queue.isLoading && !queue.data?.requests.length ? <Text className="py-16 text-center text-muted-foreground">No hay solicitudes pendientes de canalización.</Text> : null}
               <View className="mt-4 gap-4 border-t border-border pt-6">
                 <View>
                   <Text className="text-xl font-bold">Solicitudes canalizadas</Text>
@@ -1659,6 +1765,8 @@ function SuperAdminDashboard() {
   const [ineAnalysisEnabled, setIneAnalysisEnabled] = useState(false);
   const [secretaryContact, setSecretaryContact] = useState({ name: "", email: "", phone: "", extension: "" });
   const [notice, setNotice] = useState<string | null>(null);
+  const [exhibitionSearch, setExhibitionSearch] = useState("");
+  const [exhibitionEventId, setExhibitionEventId] = useState("");
   const units = useQuery({
     queryKey: ["admin", "units"],
     queryFn: adminService.listUnits,
@@ -1673,7 +1781,17 @@ function SuperAdminDashboard() {
   });
   const requests = useQuery({
     queryKey: ["admin", "requests"],
-    queryFn: requestsService.listAccessible,
+    queryFn: requestsService.listAllAccessible,
+    refetchOnWindowFocus: true,
+  });
+  const secretaryRequests = useQuery({
+    queryKey: ["admin", "secretary-requests"],
+    queryFn: identityApi.listSecretaryRequests,
+    refetchOnWindowFocus: true,
+  });
+  const emailReport = useQuery({
+    queryKey: ["admin", "email-delivery-report"],
+    queryFn: identityApi.getEmailDeliveryReport,
     refetchOnWindowFocus: true,
   });
   const events = useQuery({
@@ -1691,6 +1809,113 @@ function SuperAdminDashboard() {
       ),
     [units.data],
   );
+  const serviceNames = useMemo(
+    () => Object.fromEntries((services.data || []).map((service) => [service.id, service.name])),
+    [services.data],
+  );
+  const staffNames = useMemo(
+    () => Object.fromEntries((profiles.data || []).map((profile) => [profile.id, profile.name])),
+    [profiles.data],
+  );
+  const exhibitionEvents = useMemo(() => {
+    const term = exhibitionSearch.trim().toLocaleLowerCase("es-MX");
+    return (events.data || []).filter((event) => !term
+      || event.name.toLocaleLowerCase("es-MX").includes(term)
+      || event.municipality.toLocaleLowerCase("es-MX").includes(term)
+      || event.locality.toLocaleLowerCase("es-MX").includes(term)
+      || event.folioPrefix.toLocaleLowerCase("es-MX").includes(term));
+  }, [events.data, exhibitionSearch]);
+  const exhibitionEvent = (events.data || []).find((event) => event.id === exhibitionEventId);
+  const exhibitionRequests = useMemo<any[]>(() => [
+    ...(requests.data || [])
+      .filter((request) => request.eventId === exhibitionEventId)
+      .map((request) => ({ ...request, isSecretary: false })),
+    ...(secretaryRequests.data?.requests || [])
+      .filter((request) => request.eventId === exhibitionEventId)
+      .map((request) => ({
+        ...request,
+        isSecretary: true,
+        serviceId: "secretaria",
+        unitId: request.responsibleUnitId || "secretaria",
+        applicantUserId: request.capturedByUserId,
+        requestedAt: request.createdAt,
+      })),
+  ], [requests.data, secretaryRequests.data, exhibitionEventId]);
+  const exhibitionStatus = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) counts.set(request.status, (counts.get(request.status) || 0) + 1);
+    return [...counts.entries()].map(([status, value]) => ({ label: REQUEST_STATUS_LABELS[status] || status, value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests]);
+  const exhibitionServices = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) {
+      const label = request.isSecretary ? (request.subject || "Oficio de Secretaría") : (serviceNames[request.serviceId] || "Trámite no disponible");
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, serviceNames]);
+  const exhibitionUnits = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) {
+      const label = request.isSecretary ? (unitNames[request.unitId] || "Secretaría") : (unitNames[request.unitId] || "Unidad no disponible");
+      counts.set(label, (counts.get(label) || 0) + 1);
+    }
+    return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, unitNames]);
+  const exhibitionStaff = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) {
+      const id = request.applicantUserId || "sin-capturista";
+      const label = request.isSecretary ? (request.capturedByName || "Capturista no identificado") : (staffNames[id] || "Capturista no identificado");
+      const current = counts.get(`${id}|${label}`) || 0;
+      counts.set(`${id}|${label}`, current + 1);
+    }
+    return [...counts.entries()].map(([key, value]) => ({ id: key.split("|")[0], label: key.split("|").slice(1).join("|"), value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, staffNames]);
+  const demographicFieldKeys = useMemo(() => {
+    const normalize = (value: string) => value
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[_-]+/g, " ")
+      .toLocaleLowerCase("es-MX");
+    const fields = globalForm.data?.fields || [];
+    return {
+      age: fields
+        .filter((field) => /(^|\W)(edad|age)(\W|$)/.test(normalize(`${field.key} ${field.label}`)))
+        .map((field) => field.key),
+      gender: fields
+        .filter((field) => /(^|\W)(genero|sexo|gender)(\W|$)/.test(normalize(`${field.key} ${field.label}`)))
+        .map((field) => field.key),
+    };
+  }, [globalForm.data?.fields]);
+  const exhibitionAges = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) {
+      const data = request.applicantData || {};
+      const dynamicKey = demographicFieldKeys.age.find((key) => String(data[key] ?? "").trim());
+      const fallbackEntry = Object.entries(data).find(([key, value]) =>
+        /(^|\W)(edad|age)(\W|$)/.test(key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_-]+/g, " ").toLocaleLowerCase("es-MX"))
+        && String(value ?? "").trim(),
+      );
+      const age = dynamicKey ? data[dynamicKey] : fallbackEntry?.[1];
+      if (age) counts.set(String(age), (counts.get(String(age)) || 0) + 1);
+    }
+    return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => Number(a.label) - Number(b.label));
+  }, [exhibitionRequests, demographicFieldKeys.age]);
+  const exhibitionGenders = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const request of exhibitionRequests) {
+      const data = request.applicantData || {};
+      const dynamicKey = demographicFieldKeys.gender.find((key) => String(data[key] ?? "").trim());
+      const fallbackEntry = Object.entries(data).find(([key, value]) =>
+        /(^|\W)(genero|sexo|gender)(\W|$)/.test(key.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[_-]+/g, " ").toLocaleLowerCase("es-MX"))
+        && String(value ?? "").trim(),
+      );
+      const gender = dynamicKey ? data[dynamicKey] : fallbackEntry?.[1];
+      if (gender) counts.set(String(gender), (counts.get(String(gender)) || 0) + 1);
+    }
+    return [...counts.entries()].map(([label, value]) => ({ label, value })).sort((a, b) => b.value - a.value);
+  }, [exhibitionRequests, demographicFieldKeys.gender]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -1788,6 +2013,30 @@ function SuperAdminDashboard() {
     },
     onError: (error: Error) => setNotice(error.message),
   });
+  
+  const exportCsv = () => {
+    if (!exhibitionEventId) return;
+    const escape = (value: unknown) => '"' + String(value ?? "").replaceAll('"', '""') + '"';
+    const rows = exhibitionRequests.map((request) => [
+      request.folio || "—",
+      request.isSecretary ? (request.subject || "Oficio de Secretaría") : (serviceNames[request.serviceId] || request.serviceId),
+      request.isSecretary ? "Secretaría" : (unitNames[request.unitId] || request.unitId),
+      request.isSecretary ? "Oficio" : "Trámite",
+      request.isSecretary ? (request.createdAt ? new Date(request.createdAt).toLocaleString("es-MX") : "—") : (request.requestedAt ? new Date(request.requestedAt).toLocaleString("es-MX") : "—"),
+      (request.status || "").replaceAll("_", " "),
+      request.isSecretary ? (request.capturedByName || "No identificado") : (staffNames[request.applicantUserId] || "No identificado"),
+    ]);
+    const csv = [
+      ["Folio", "Trámite/Asunto", "Unidad", "Tipo", "Fecha", "Estatus", "Capturista"],
+      ...rows,
+    ].map((row) => row.map(escape).join(",")).join("\n");
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" }));
+    link.download = "reporte-evento-" + (exhibitionEvent?.folioPrefix || "general") + ".csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  };
+
   const saveGlobalForm = useMutation({
     mutationFn: () => {
       if (!globalForm.data)
@@ -1900,6 +2149,8 @@ function SuperAdminDashboard() {
     services.isLoading ||
     profiles.isLoading ||
     requests.isLoading ||
+    secretaryRequests.isLoading ||
+    emailReport.isLoading ||
     events.isLoading ||
     globalForm.isLoading;
   const statusChartData = useMemo<DashboardChartDatum[]>(() => {
@@ -2048,8 +2299,8 @@ function SuperAdminDashboard() {
                     />
                     <Metric
                       label="Solicitudes"
-                      value={requests.data?.length || 0}
-                      note="Registros visibles"
+                      value={(requests.data?.length || 0) + (secretaryRequests.data?.requests.length || 0)}
+                      note={`${requests.data?.length || 0} normales · ${secretaryRequests.data?.requests.length || 0} de Secretaría`}
                     />
                   </View>
                   <View className="grid grid-cols-2 gap-4">
@@ -2583,7 +2834,12 @@ function SuperAdminDashboard() {
                 </View>
               )}
               {section === "solicitudes" && (
-                <View className="gap-4">
+                <View className="gap-6">
+                  <View>
+                    <Text className="text-xl font-bold">Solicitudes normales</Text>
+                    <Text className="mb-4 mt-1 text-sm text-muted-foreground">
+                      Trámites y servicios registrados por el personal capturista.
+                    </Text>
                   <AdminDataTable
                     data={requests.data || []}
                     getRowId={(item) => item.id}
@@ -2600,6 +2856,106 @@ function SuperAdminDashboard() {
                       { key: "status", title: "ESTATUS", value: (item) => item.status || "", width: 160, render: (item) => <Text className="capitalize text-primary">{(item.status || "").replaceAll("_", " ")}</Text> },
                     ]}
                     renderActions={(item) => <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud/${item.id}` as any)}><Text>Ver detalle</Text></Button>}
+                  />
+                  </View>
+                  <View>
+                    <Text className="text-xl font-bold">Solicitudes de Secretaría</Text>
+                    <Text className="mb-4 mt-1 text-sm text-muted-foreground">
+                      Solicitudes prioritarias capturadas por Secretaría, sus representantes o el Enlace.
+                    </Text>
+                    <AdminDataTable
+                      data={secretaryRequests.data?.requests || []}
+                      getRowId={(item) => item.id}
+                      searchPlaceholder="Buscar folio, asunto o capturista..."
+                      filterLabel="Todos los eventos"
+                      filterOptions={(events.data || []).map((event) => ({ label: event.name, value: event.id }))}
+                      getFilterValue={(item) => item.eventId || ""}
+                      emptyMessage="No hay solicitudes de Secretaría registradas."
+                      columns={[
+                        { key: "folio", title: "FOLIO", value: (item) => item.folio || "—" },
+                        { key: "eventFolio", title: "FOLIO EVENTO", value: (item) => item.eventFolio || "—", width: 170 },
+                        { key: "subject", title: "ASUNTO", value: (item) => item.subject || "—", width: 280 },
+                        { key: "capturedBy", title: "CAPTURÓ", value: (item) => item.capturedByName || "—", width: 210 },
+                        { key: "date", title: "FECHA", value: (item) => item.createdAt ? new Date(item.createdAt).getTime() : 0, width: 140, render: (item) => <Text>{item.createdAt ? new Date(item.createdAt).toLocaleDateString("es-MX") : "—"}</Text> },
+                        { key: "status", title: "ESTATUS", value: (item) => item.status || "", width: 180, render: (item) => <Text className="capitalize text-primary">{(item.status || "").replaceAll("_", " ")}</Text> },
+                      ]}
+                      renderActions={(item) => <Button size="sm" variant="outline" onPress={() => router.push(`/admin/solicitud-secretaria/${item.id}` as any)}><Text>Ver y editar</Text></Button>}
+                    />
+                  </View>
+                </View>
+              )}
+              
+              {section === "reportes" && (
+                <View className="gap-6">
+                  <View className="rounded-2xl border border-border bg-card p-5">
+                    <Text className="text-xl font-bold">Seleccionar evento para reporte</Text>
+                    <Text className="mb-4 mt-1 text-sm text-muted-foreground">Busca por nombre, municipio o folio para consultar el reporte detallado que incluye trámites y oficios de Secretaría.</Text>
+                    <Input value={exhibitionSearch} onChangeText={setExhibitionSearch} placeholder="Buscar evento..." />
+                    <View className="mt-3 max-h-52 gap-2 overflow-y-auto">
+                      {exhibitionEvents.map((event) => (
+                        <Pressable key={event.id} onPress={() => setExhibitionEventId(event.id)} className={"grid grid-cols-[1.5fr_1fr_auto] items-center gap-3 rounded-xl border p-3 " + (exhibitionEventId === event.id ? "border-primary bg-primary/10" : "border-border bg-muted/30")}>
+                          <View><Text className="font-semibold">{event.name}</Text><Text className="text-xs text-muted-foreground">{event.folioPrefix} · {event.locality}, {event.municipality}</Text></View>
+                          <Text className="text-sm">{new Date(event.startsAt).toLocaleDateString("es-MX")}</Text>
+                          <Text className="font-semibold text-primary">Seleccionar</Text>
+                        </Pressable>
+                      ))}
+                      {!exhibitionEvents.length ? <Text className="py-5 text-center text-muted-foreground">No se encontraron eventos.</Text> : null}
+                    </View>
+                  </View>
+                  {exhibitionEvent ? (
+                    <View className="overflow-hidden rounded-3xl border border-primary/20 bg-card p-6 shadow-sm">
+                      <View className="mb-5 flex-row items-start justify-between gap-4">
+                        <View><Text className="text-xs font-bold uppercase tracking-wider text-primary">Reporte detallado consolidado</Text><Text className="mt-1 text-3xl font-bold">{exhibitionEvent.name}</Text><Text className="mt-2 text-muted-foreground">Resultados territoriales integrando capturas de áreas y de Secretaría.</Text></View>
+                        <Button onPress={exportCsv}><Text>Exportar reporte completo (CSV)</Text></Button>
+                      </View>
+                      <View className="flex-row flex-wrap gap-4">
+                        <View className="flex-1 min-w-[150px] rounded-xl border border-border bg-muted/30 p-4"><Text className="text-sm text-muted-foreground">Total de atenciones</Text><Text className="text-2xl font-bold text-primary">{exhibitionRequests.length}</Text></View>
+                        <View className="flex-1 min-w-[150px] rounded-xl border border-border bg-muted/30 p-4"><Text className="text-sm text-muted-foreground">Áreas / Unidades</Text><Text className="text-2xl font-bold">{exhibitionUnits.length}</Text></View>
+                        <View className="flex-1 min-w-[150px] rounded-xl border border-border bg-muted/30 p-4"><Text className="text-sm text-muted-foreground">Capturistas</Text><Text className="text-2xl font-bold">{exhibitionStaff.length}</Text></View>
+                      </View>
+                      <View className="mt-6 grid grid-cols-2 gap-4 max-lg:grid-cols-1">
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Solicitudes por estatus</Text><View className="mt-4"><StatusPieChart data={exhibitionStatus} /></View></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Demografía: Edades</Text><Text className="mt-1 text-xs text-muted-foreground">Datos extraídos del formulario global.</Text><View className="mt-4"><RequestsBarChart data={exhibitionAges} /></View></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Demografía: Género</Text><Text className="mt-1 text-xs text-muted-foreground">Datos extraídos del formulario global.</Text><View className="mt-4"><StatusPieChart data={exhibitionGenders} /></View></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Trámites y oficios solicitados</Text><View className="mt-4"><RequestsBarChart data={exhibitionServices.slice(0, 8)} /></View></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Participación de unidades</Text><View className="mt-4"><RequestsBarChart data={exhibitionUnits.slice(0, 8)} /></View></View>
+                        <View className="rounded-2xl border border-border bg-card p-5"><Text className="mb-4 text-xl font-bold">Rendimiento de capturistas</Text><View className="gap-2">{exhibitionStaff.map((member, index) => <View key={member.id} className="flex-row items-center rounded-xl bg-muted/50 p-3"><Text className="w-10 font-bold text-primary">#{index + 1}</Text><Text className="flex-1 font-semibold">{member.label}</Text><Text>{member.value} atenciones</Text></View>)}{!exhibitionStaff.length ? <Text className="text-muted-foreground">Sin capturas registradas.</Text> : null}</View></View>
+                      </View>
+                    </View>
+                  ) : (
+                    <View className="grid min-h-60 place-content-center rounded-2xl border border-dashed border-border bg-card text-center"><Text className="text-xl font-bold">Selecciona un evento</Text><Text className="mt-2 text-muted-foreground">Aquí aparecerá el reporte consolidado de la jornada.</Text></View>
+                  )}
+                </View>
+              )}
+
+              {section === "correos" && (
+                <View className="gap-5">
+                  <View className="flex-row flex-wrap gap-4">
+                    <Metric label="Con correo enviado" value={(emailReport.data?.items || []).filter((item) => item.sent).length} note="Último intento exitoso" />
+                    <Metric label="Sin envío" value={(emailReport.data?.items || []).filter((item) => !item.sent).length} note="Sin correo o con error" />
+                    <Metric label="Correo modificado" value={(emailReport.data?.items || []).filter((item) => item.emailChanged).length} note="Requieren reenvío al correo nuevo" />
+                  </View>
+                  <AdminDataTable
+                    data={emailReport.data?.items || []}
+                    getRowId={(item) => `${item.requestType}-${item.id}`}
+                    searchPlaceholder="Buscar folio o correo..."
+                    filterLabel="Todos los estados"
+                    filterOptions={[
+                      { label: "Enviado", value: "enviado" },
+                      { label: "No enviado", value: "no_enviado" },
+                      { label: "Correo modificado", value: "modificado" },
+                    ]}
+                    getFilterValue={(item) => item.emailChanged ? "modificado" : item.sent ? "enviado" : "no_enviado"}
+                    emptyMessage="Todavía no hay información de envíos de correo."
+                    columns={[
+                      { key: "folio", title: "FOLIO", value: (item) => item.folio },
+                      { key: "type", title: "TIPO", value: (item) => item.requestType, width: 130, render: (item) => <Text className="capitalize">{item.requestType}</Text> },
+                      { key: "currentEmail", title: "CORREO ACTUAL", value: (item) => item.currentEmail || "Sin correo", width: 250 },
+                      { key: "sentEmail", title: "ÚLTIMO DESTINATARIO", value: (item) => item.lastSentEmail || "—", width: 250 },
+                      { key: "date", title: "ÚLTIMO INTENTO", value: (item) => item.lastAttemptAt ? new Date(item.lastAttemptAt).getTime() : 0, width: 170, render: (item) => <Text>{item.lastAttemptAt ? new Date(item.lastAttemptAt).toLocaleString("es-MX") : "Sin registro"}</Text> },
+                      { key: "status", title: "RESULTADO", value: (item) => item.emailChanged ? "Correo modificado" : item.sent ? "Enviado" : item.error || "No enviado", width: 190, render: (item) => <Text className={item.emailChanged ? "font-semibold text-amber-700" : item.sent ? "font-semibold text-emerald-700" : "font-semibold text-destructive"}>{item.emailChanged ? "Requiere reenvío" : item.sent ? "Enviado" : item.error || "No enviado"}</Text> },
+                    ]}
+                    renderActions={(item) => <Button size="sm" variant="outline" onPress={() => router.push(item.requestType === "secretaria" ? `/admin/solicitud-secretaria/${item.id}` as any : `/admin/solicitud/${item.id}` as any)}><Text>{item.emailChanged ? "Revisar y reenviar" : "Ver solicitud"}</Text></Button>}
                   />
                 </View>
               )}

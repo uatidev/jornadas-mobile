@@ -429,6 +429,13 @@ export default async ({ req, res, log, error }) => {
           error(`secretary-email-confirmation ${folio}: ${emailResult.reason}`);
         }
       }
+      await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${created.$id}`, {
+        data: {
+          ...(recipient ? { correoDestinatario: recipient } : {}),
+          correoEnviado: Boolean(emailResult.sent),
+          fechaUltimoCorreo: new Date().toISOString(),
+        },
+      });
       return json(201, {
         request: mapSecretaryRequest(created),
         emailSent: emailResult.sent,
@@ -648,6 +655,13 @@ export default async ({ req, res, log, error }) => {
           error(`email-confirmation ${folio}: ${emailResult.reason}`);
         }
       }
+      await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes/documents/${request.$id}`, {
+        data: {
+          ...(recipient ? { correoDestinatario: recipient } : {}),
+          correoEnviado: Boolean(emailResult.sent),
+          fechaUltimoCorreo: new Date().toISOString(),
+        },
+      });
       return json(201, {
         id: request.$id,
         folio,
@@ -692,6 +706,117 @@ export default async ({ req, res, log, error }) => {
         { data: { activo: false, fechaFin: new Date().toISOString() } },
       );
       return json(200, updated);
+    }
+
+    if (input.action === "resendSecretaryReceipt") {
+      if (!isSuperAdmin || profile.rolSistema !== "super_admin")
+        return json(403, { message: "Solo superadministración puede reenviar comprobantes" });
+      const recipient = String(input.recipientEmail || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient)) return json(400, { message: "Captura un correo válido" });
+      const request = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${input.requestId}`);
+      const event = request.eventoAtencionId ? await call("GET", `/databases/${DATABASE_ID}/collections/eventos_atencion/documents/${request.eventoAtencionId}`) : null;
+      let contact = {};
+      try {
+        const forms = await call("GET", `/databases/${DATABASE_ID}/collections/configuracion_formulario_global/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [100] }))}`);
+        const active = (forms.documents || []).filter((item) => item.activo).sort((a, b) => Number(b.version || 0) - Number(a.version || 0))[0];
+        contact = JSON.parse(active?.campos || "{}").secretaryContact || {};
+      } catch { contact = {}; }
+      try {
+        await sendSecretaryConfirmation({ to: recipient, folio: request.folio, eventFolio: request.folioEvento, subject: request.asunto, event, requestedAt: new Date(request.fechaRegistro), contact });
+        await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${request.$id}`, { data: { correoDestinatario: recipient, correoEnviado: true, fechaUltimoCorreo: new Date().toISOString() } });
+        return json(200, { sent: true, message: `Comprobante reenviado a ${recipient}` });
+      } catch (cause) {
+        await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents/${request.$id}`, { data: { correoDestinatario: recipient, correoEnviado: false, fechaUltimoCorreo: new Date().toISOString() } });
+        return json(502, { message: cause.message || "No fue posible reenviar el comprobante" });
+      }
+    }
+
+    if (input.action === "resendRequestReceipt") {
+      if (!isSuperAdmin || profile.rolSistema !== "super_admin")
+        return json(403, { message: "Solo superadministración puede reenviar comprobantes" });
+
+      const recipient = String(input.recipientEmail || "").trim().toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipient))
+        return json(400, { message: "Captura un correo electrónico válido" });
+
+      const request = await call(
+        "GET",
+        `/databases/${DATABASE_ID}/collections/solicitudes/documents/${input.requestId}`,
+      );
+      const [service, unit, event] = await Promise.all([
+        call("GET", `/databases/${DATABASE_ID}/collections/tramites_servicios/documents/${request.tramiteServicioId}`),
+        call("GET", `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${request.unidadAdministrativaId}`),
+        request.eventoAtencionId
+          ? call("GET", `/databases/${DATABASE_ID}/collections/eventos_atencion/documents/${request.eventoAtencionId}`)
+          : Promise.resolve(null),
+      ]);
+
+      let attendedBy = "Personal de atención";
+      if (request.solicitanteUserId) {
+        try {
+          const capturedBy = await call(
+            "GET",
+            `/databases/${DATABASE_ID}/collections/usuarios_perfil/documents/${request.solicitanteUserId}`,
+          );
+          attendedBy = capturedBy.nombre || capturedBy.email || attendedBy;
+        } catch {
+          attendedBy = "Personal de atención";
+        }
+      }
+
+      try {
+        const result = await sendRequestConfirmation({
+          to: recipient,
+          folio: request.folio,
+          eventFolio: request.folioEvento,
+          service,
+          unit,
+          event,
+          requestedAt: new Date(request.fechaSolicitud),
+          attendedBy,
+        });
+        if (!result.sent)
+          return json(503, { message: result.reason || "No fue posible enviar el comprobante" });
+        await call("PATCH", `/databases/${DATABASE_ID}/collections/solicitudes/documents/${request.$id}`, {
+          data: { correoDestinatario: recipient, correoEnviado: true, fechaUltimoCorreo: new Date().toISOString() },
+        });
+        log(`receipt-resend ${request.folio} to ${recipient}`);
+        return json(200, { sent: true, message: `Comprobante reenviado a ${recipient}` });
+      } catch (cause) {
+        error(`receipt-resend ${request.folio}: ${cause.message || cause}`);
+        return json(502, { message: cause.message || "No fue posible reenviar el comprobante" });
+      }
+    }
+
+    if (input.action === "emailDeliveryReport") {
+      if (!isSuperAdmin || profile.rolSistema !== "super_admin")
+        return json(403, { message: "Solo superadministración puede consultar correos" });
+      const [regular, secretary] = await Promise.all([
+        call("GET", `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`),
+        call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`),
+      ]);
+      const buildItem = (item, requestType) => {
+        let applicantData = {};
+        try { applicantData = JSON.parse(item.datosSolicitante || "{}"); } catch { applicantData = {}; }
+        const currentEmail = findApplicantEmail(applicantData);
+        const lastSentEmail = item.correoDestinatario || null;
+        return {
+          id: item.$id,
+          folio: item.folio,
+          requestType,
+          currentEmail,
+          lastSentEmail,
+          sent: Boolean(item.correoEnviado),
+          lastAttemptAt: item.fechaUltimoCorreo,
+          error: item.fechaUltimoCorreo && !item.correoEnviado ? "El último envío no se completó" : null,
+          emailChanged: Boolean(currentEmail && lastSentEmail && currentEmail !== lastSentEmail),
+        };
+      };
+      const items = [
+        ...(regular.documents || []).map((item) => buildItem(item, "normal")),
+        ...(secretary.documents || []).map((item) => buildItem(item, "secretaria")),
+      ].sort((a, b) => new Date(b.lastAttemptAt || 0).getTime() - new Date(a.lastAttemptAt || 0).getTime());
+      return json(200, { items });
     }
 
     if (input.action === "reportingStaff") {
@@ -1012,6 +1137,51 @@ export default async ({ req, res, log, error }) => {
         },
       );
       return json(201, staffProfile);
+    }
+
+    if (input.action === "adminUpdateRequestData" || input.action === "adminUpdateSecretaryRequestData") {
+      if (!isSuperAdmin || profile.rolSistema !== "super_admin")
+        return json(403, { message: "Solo superadministración puede corregir solicitudes" });
+      const reason = String(input.reason || "").trim();
+      if (reason.length < 5)
+        return json(400, { message: "Indica el motivo de la corrección" });
+      const isSecretary = input.action === "adminUpdateSecretaryRequestData";
+      const collection = isSecretary ? "solicitudes_secretaria" : "solicitudes";
+      const current = await call("GET", `/databases/${DATABASE_ID}/collections/${collection}/documents/${input.requestId}`);
+      let data;
+      if (isSecretary) {
+        if (!String(input.subject || "").trim()) return json(400, { message: "El asunto es obligatorio" });
+        if (!["gobernador", "oficina_gubernamental", "otra"].includes(input.source))
+          return json(400, { message: "La procedencia no es válida" });
+        data = {
+          datosSolicitante: JSON.stringify(input.applicantData || {}),
+          asunto: String(input.subject).trim(),
+          procedencia: input.source,
+          numeroOficio: String(input.officeNumber || "").trim() || null,
+          fechaOficio: input.officeDate ? new Date(input.officeDate).toISOString() : null,
+          observaciones: String(input.notes || "").trim() || null,
+          fechaActualizacion: new Date().toISOString(),
+        };
+      } else {
+        data = {
+          datosSolicitante: JSON.stringify(input.applicantData || {}),
+          datosTramite: JSON.stringify(input.requestData || {}),
+        };
+      }
+      const updated = await call("PATCH", `/databases/${DATABASE_ID}/collections/${collection}/documents/${current.$id}`, { data });
+      await call("POST", `/databases/${DATABASE_ID}/collections/historial_solicitud/documents`, {
+        documentId: "unique()",
+        permissions: [`read(\"label:superadmin\")`, `read(\"user:${current.solicitanteUserId || current.capturadoPorUserId}\")`],
+        data: {
+          solicitudId: current.$id,
+          estatusAnterior: current.estatus,
+          estatusNuevo: current.estatus,
+          comentario: `Corrección administrativa: ${reason}`,
+          realizadoPorUserId: userId,
+          fecha: new Date().toISOString(),
+        },
+      });
+      return json(200, { updated: true });
     }
 
     if (input.action === "updateStatus") {

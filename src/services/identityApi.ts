@@ -75,6 +75,18 @@ export interface CanalizationReportItem {
   pending: boolean;
 }
 
+export interface EmailDeliveryItem {
+  id: string;
+  folio: string;
+  requestType: "normal" | "secretaria";
+  currentEmail?: string;
+  lastSentEmail?: string;
+  sent: boolean;
+  lastAttemptAt?: string;
+  error?: string;
+  emailChanged: boolean;
+}
+
 export const identityApi = {
   ensureProfile: () => execute({ action: "ensureProfile" }),
   getServicePopularity: () =>
@@ -118,6 +130,25 @@ export const identityApi = {
     receivedBenefit?: boolean;
     benefitDetail?: string;
   }) => execute({ action: "updateStatus", requestId, status, comment, ...outcome }),
+  resendRequestReceipt: (requestId: string, recipientEmail: string) =>
+    execute<{ sent: boolean; message: string }>({
+      action: "resendRequestReceipt",
+      requestId,
+      recipientEmail,
+    }),
+  resendSecretaryReceipt: (requestId: string, recipientEmail: string) =>
+    execute<{ sent: boolean; message: string }>({ action: "resendSecretaryReceipt", requestId, recipientEmail }),
+  adminUpdateRequestData: (requestId: string, applicantData: Record<string, unknown>, requestData: Record<string, unknown>, reason: string) =>
+    execute({ action: "adminUpdateRequestData", requestId, applicantData, requestData, reason }),
+  adminUpdateSecretaryRequestData: (requestId: string, data: {
+    applicantData: Record<string, string>;
+    subject: string;
+    source: "gobernador" | "oficina_gubernamental" | "otra";
+    officeNumber?: string;
+    officeDate?: string;
+    notes?: string;
+    reason: string;
+  }) => execute({ action: "adminUpdateSecretaryRequestData", requestId, ...data }),
   finishEvent: (eventId: string) => execute({ action: "finishEvent", eventId }),
   getReportingStaff: () =>
     execute<{ staff: ReportingStaffMember[] }>({ action: "reportingStaff" }),
@@ -127,6 +158,8 @@ export const identityApi = {
     execute<{ requests: ServiceRequest[] }>({ action: "listReassignmentQueue" }),
   getCanalizationReport: () =>
     execute<{ items: CanalizationReportItem[] }>({ action: "canalizationReport" }),
+  getEmailDeliveryReport: () =>
+    execute<{ items: EmailDeliveryItem[] }>({ action: "emailDeliveryReport" }),
   reassignRequest: (requestId: string, unitId: string, comment?: string) =>
     execute({ action: "reassignRequest", requestId, unitId, comment }),
   submitSecretaryRequest: (data: {

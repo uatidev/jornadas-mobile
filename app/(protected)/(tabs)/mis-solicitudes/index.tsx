@@ -8,7 +8,7 @@ import {
   SelectValue,
 } from "@/src/components/ui/select";
 import { Text } from "@/src/components/ui/text";
-import { useActiveEvents, useServicesCatalog } from "@/src/hooks/useCatalog";
+import { useActiveEvents, useGlobalForm, useServicesCatalog } from "@/src/hooks/useCatalog";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { identityApi } from "@/src/services/identityApi";
 import { requestsService } from "@/src/services/requests";
@@ -17,13 +17,42 @@ import { useMemo, useState } from "react";
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
+const detailValue = (value: unknown) => {
+  if (typeof value !== "string") return String(value ?? "—");
+  try {
+    const parsed = JSON.parse(value);
+    return parsed?.name ? `Archivo: ${parsed.name}` : value;
+  } catch {
+    return value || "—";
+  }
+};
+
+function DetailRows({ data, labels = {} }: { data?: Record<string, unknown>; labels?: Record<string, string> }) {
+  const entries = Object.entries(data || {}).filter(([, value]) => value !== "" && value != null);
+  if (!entries.length) return <Text className="text-sm text-muted-foreground">Sin información adicional.</Text>;
+  return (
+    <View className="gap-3">
+      {entries.map(([key, value]) => (
+        <View key={key} className="border-b border-border/50 pb-2">
+          <Text className="text-[11px] font-bold uppercase text-muted-foreground">
+            {labels[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}
+          </Text>
+          <Text className="mt-1 text-sm">{detailValue(value)}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
 export default function MisSolicitudesScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [selectedEventId, setSelectedEventId] = useState("");
   const [requestType, setRequestType] = useState<"all" | "regular" | "secretary">("all");
+  const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
   const activeEvents = useActiveEvents();
   const services = useServicesCatalog();
+  const globalForm = useGlobalForm();
   const requests = useQuery({
     queryKey: ["my-captured-requests", user?.id],
     queryFn: () => requestsService.listByCapturista(user!.id),
@@ -63,6 +92,17 @@ export default function MisSolicitudesScreen() {
     () => Object.fromEntries((services.data || []).map((service) => [service.id, service.name])),
     [services.data],
   );
+  const globalFieldLabels = useMemo(
+    () => Object.fromEntries((globalForm.data?.fields || []).map((field) => [field.key, field.label])),
+    [globalForm.data?.fields],
+  );
+  const serviceFieldLabels = useMemo(
+    () => Object.fromEntries((services.data || []).map((service) => [
+      service.id,
+      Object.fromEntries((service.formConfig?.fields || []).map((field) => [field.key, field.label])),
+    ])),
+    [services.data],
+  );
   const requestsForEvent = useMemo(
     () => (requests.data || []).filter((request) => request.eventId === effectiveEventId),
     [requests.data, effectiveEventId],
@@ -82,7 +122,7 @@ export default function MisSolicitudesScreen() {
       : requestType === "secretary"
         ? secretaryRequestsForEvent.length
         : requestsForEvent.length + secretaryRequestsForEvent.length;
-  const loading = activeEvents.isLoading || services.isLoading || requests.isLoading || (canSeeSecretaryRequests && secretaryRequests.isLoading);
+  const loading = activeEvents.isLoading || services.isLoading || globalForm.isLoading || requests.isLoading || (canSeeSecretaryRequests && secretaryRequests.isLoading);
 
   return (
     <View className="flex-1 bg-background">
@@ -231,6 +271,28 @@ export default function MisSolicitudesScreen() {
                           <Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleString("es-MX")}</Text>
                           {request.priorityOnReopening ? <Text className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Prioritaria</Text> : null}
                         </View>
+                        <Button
+                          className="mt-4 w-full"
+                          variant="outline"
+                          onPress={() => setExpandedRequest((current) => current === `regular-${request.id}` ? null : `regular-${request.id}`)}
+                        >
+                          <Text>{expandedRequest === `regular-${request.id}` ? "Ocultar detalle" : "Ver detalle"}</Text>
+                        </Button>
+                        {expandedRequest === `regular-${request.id}` ? (
+                          <View className="mt-4 gap-4 border-t border-border pt-4">
+                            <View>
+                              <Text className="mb-3 font-bold">Datos del solicitante</Text>
+                              <DetailRows data={request.applicantData} labels={globalFieldLabels} />
+                            </View>
+                            <View>
+                              <Text className="mb-3 font-bold">Datos del trámite</Text>
+                              <DetailRows data={request.requestData} labels={serviceFieldLabels[request.serviceId]} />
+                            </View>
+                            {request.notes ? (
+                              <View><Text className="font-bold">Observaciones</Text><Text className="mt-1 text-sm">{request.notes}</Text></View>
+                            ) : null}
+                          </View>
+                        ) : null}
                       </View>
                     ))}
                   </View>
@@ -258,6 +320,26 @@ export default function MisSolicitudesScreen() {
                           <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">{request.status.replaceAll("_", " ")}</Text>
                         </View>
                         <Text className="mt-3 text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleString("es-MX")}</Text>
+                        <Button
+                          className="mt-4 w-full"
+                          variant="outline"
+                          onPress={() => setExpandedRequest((current) => current === `secretary-${request.id}` ? null : `secretary-${request.id}`)}
+                        >
+                          <Text>{expandedRequest === `secretary-${request.id}` ? "Ocultar detalle" : "Ver detalle"}</Text>
+                        </Button>
+                        {expandedRequest === `secretary-${request.id}` ? (
+                          <View className="mt-4 gap-4 border-t border-border pt-4">
+                            <View><Text className="mb-3 font-bold">Datos del solicitante</Text><DetailRows data={request.applicantData} labels={globalFieldLabels} /></View>
+                            <View className="gap-2">
+                              <Text><Text className="font-bold">Procedencia: </Text>{request.source.replaceAll("_", " ")}</Text>
+                              <Text><Text className="font-bold">Ruta de atención: </Text>{request.route.replaceAll("_", " ")}</Text>
+                              {request.officeNumber ? <Text><Text className="font-bold">Número de oficio: </Text>{request.officeNumber}</Text> : null}
+                              {request.officeDate ? <Text><Text className="font-bold">Fecha del oficio: </Text>{new Date(request.officeDate).toLocaleDateString("es-MX")}</Text> : null}
+                              {request.notes ? <Text><Text className="font-bold">Observaciones: </Text>{request.notes}</Text> : null}
+                              <Text><Text className="font-bold">Documentos adjuntos: </Text>{request.documents.length}</Text>
+                            </View>
+                          </View>
+                        ) : null}
                       </View>
                     ))}
                   </View>

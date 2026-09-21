@@ -2,7 +2,7 @@ import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
 import type { ServiceFormField } from "@/src/types/catalog";
 import { TABASCO_MUNICIPALITIES } from "@/src/constants/tabasco";
-import { Pressable, View } from "react-native";
+import { Linking, Platform, Pressable, View } from "react-native";
 import { useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
@@ -33,6 +33,15 @@ const isMunicipalityField = (field: ServiceFormField) => {
   return identity.includes("municipio");
 };
 
+type UploadedDocument = { fileId: string; name: string; type: string; size?: number; url?: string };
+const uploadedDocuments = (value?: string): UploadedDocument[] => {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return (Array.isArray(parsed) ? parsed : [parsed]).filter((item) => item?.fileId);
+  } catch { return []; }
+};
+
 export function DynamicGlobalForm({
   fields,
   values,
@@ -46,12 +55,15 @@ export function DynamicGlobalForm({
     onChange({ ...values, [key]: value });
   const uploadPickedFile = async (
     field: ServiceFormField,
-    file: File | { uri: string; name: string; type: string },
+    file: File | { uri: string; name: string; type: string; size?: number },
+    append = false,
   ) => {
     setUploadingKey(field.key);
     try {
       const uploaded = await filesService.uploadImage(file, "request_documents");
-      setValue(field.key, JSON.stringify({ fileId: uploaded.filename, name: uploaded.originalname, type: uploaded.mimetype, size: uploaded.size, url: uploaded.url }));
+      const document = { fileId: uploaded.filename, name: uploaded.originalname, type: uploaded.mimetype, size: uploaded.size, url: uploaded.url };
+      const current = uploadedDocuments(values[field.key]);
+      setValue(field.key, JSON.stringify(append ? [...current, document] : document));
     } catch (cause) {
       setUploadErrors((current) => ({ ...current, [field.key]: cause instanceof Error ? cause.message : "No fue posible subir el archivo" }));
     } finally {
@@ -76,27 +88,57 @@ export function DynamicGlobalForm({
   };
   const pickImage = async (field: ServiceFormField) => {
     setUploadErrors((current) => ({ ...current, [field.key]: "" }));
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      setUploadErrors((current) => ({ ...current, [field.key]: "Permite el acceso a Fotos para seleccionar una imagen." }));
-      return;
+    try {
+      const result =
+        Platform.OS === "web"
+          ? await ImagePicker.launchImageLibraryAsync({
+              mediaTypes: ImagePicker.MediaTypeOptions.Images,
+              allowsEditing: false,
+              quality: 0.9,
+              allowsMultipleSelection: false,
+            })
+          : await (async () => {
+              const permission =
+                await ImagePicker.requestCameraPermissionsAsync();
+              if (!permission.granted) {
+                setUploadErrors((current) => ({
+                  ...current,
+                  [field.key]:
+                    "Se necesita permiso para usar la cámara. Habilítalo en la configuración del teléfono.",
+                }));
+                if (!permission.canAskAgain) {
+                  await Linking.openSettings();
+                }
+                return null;
+              }
+              return ImagePicker.launchCameraAsync({
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                allowsEditing: false,
+                quality: 0.85,
+              });
+            })();
+
+      if (!result || result.canceled || !result.assets[0]) return;
+      const asset = result.assets[0];
+      await uploadPickedFile(
+        field,
+        asset.file || {
+          uri: asset.uri,
+          name: asset.fileName || `imagen-${Date.now()}.jpg`,
+          type: asset.mimeType || "image/jpeg",
+          size: asset.fileSize,
+        },
+        true,
+      );
+    } catch (cause) {
+      setUploadErrors((current) => ({
+        ...current,
+        [field.key]:
+          cause instanceof Error
+            ? cause.message
+            : "No fue posible abrir la cámara.",
+      }));
     }
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      allowsEditing: false,
-      quality: 0.9,
-      allowsMultipleSelection: false,
-    });
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    await uploadPickedFile(
-      field,
-      asset.file || {
-        uri: asset.uri,
-        name: asset.fileName || `imagen-${Date.now()}.jpg`,
-        type: asset.mimeType || "image/jpeg",
-      },
-    );
   };
 
   return (
@@ -107,6 +149,7 @@ export function DynamicGlobalForm({
       </View>
       {fields.map((field) => {
         const value = values[field.key] || "";
+        const attachedDocuments = uploadedDocuments(value);
         const options =
           field.options?.length || !isMunicipalityField(field)
             ? field.options || []
@@ -130,8 +173,18 @@ export function DynamicGlobalForm({
               <View className="gap-2 rounded-xl border border-dashed border-border p-4">
                 <View className="flex-row flex-wrap gap-2">
                   {field.fileType !== "document" ? (
-                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key} onPress={() => pickImage(field)}>
-                      <Text>{uploadingKey === field.key ? "Subiendo..." : value ? "Cambiar por una imagen" : "Elegir de Fotos"}</Text>
+                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key || attachedDocuments.length >= 5} onPress={() => pickImage(field)}>
+                      <Text>
+                        {uploadingKey === field.key
+                          ? "Subiendo..."
+                          : Platform.OS === "web"
+                            ? attachedDocuments.length
+                              ? "Agregar otra imagen"
+                              : "Elegir imagen"
+                            : attachedDocuments.length
+                              ? "Tomar otra foto"
+                              : "Tomar foto"}
+                      </Text>
                     </Button>
                   ) : null}
                   {field.fileType !== "image" ? (
@@ -140,17 +193,18 @@ export function DynamicGlobalForm({
                     </Button>
                   ) : null}
                 </View>
-                {value ? (
-                  <View className="flex-row items-center justify-between gap-3">
-                    <Text className="flex-1 text-sm text-primary" numberOfLines={1}>
-                      {(() => { try { return JSON.parse(value).name; } catch { return "Archivo adjunto"; } })()}
-                    </Text>
-                    <Pressable onPress={() => setValue(field.key, "")}><Text className="text-sm text-destructive">Quitar</Text></Pressable>
+                {attachedDocuments.map((document, index) => (
+                  <View key={document.fileId} className="flex-row items-center justify-between gap-3 rounded-lg bg-muted/50 p-2">
+                    <Text className="flex-1 text-sm text-primary" numberOfLines={1}>{index + 1}. {document.name}</Text>
+                    <Pressable onPress={() => {
+                      const remaining = attachedDocuments.filter((item) => item.fileId !== document.fileId);
+                      setValue(field.key, remaining.length ? JSON.stringify(remaining) : "");
+                    }}><Text className="text-sm text-destructive">Quitar</Text></Pressable>
                   </View>
-                ) : null}
+                ))}
                 {uploadErrors[field.key] ? <Text className="text-sm text-destructive">{uploadErrors[field.key]}</Text> : null}
                 <Text className="text-xs text-muted-foreground">
-                  {field.fileType === "document" ? "PDF, Word o Excel. Máximo 15 MB." : field.fileType === "image" ? "Imágenes (JPG, PNG). Máximo 15 MB." : "PDF, imagen, Word o Excel. Máximo 15 MB."}
+                  {field.fileType === "document" ? "PDF, Word o Excel. Máximo 15 MB." : `Hasta 5 fotografías (${attachedDocuments.length}/5). Máximo 15 MB por imagen.`}
                 </Text>
               </View>
             ) : isChoice ? (

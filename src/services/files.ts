@@ -30,7 +30,7 @@ class FilesService {
   }
 
   async uploadImage(
-    file: File | { uri: string; name: string; type: string },
+    file: File | { uri: string; name: string; type: string; size?: number },
     bucketType: "images" | "ine_images" | "catalog_images" | "request_documents" = "images",
   ): Promise<FileUploadResponse> {
     try {
@@ -68,13 +68,14 @@ class FilesService {
           fileData = new File([blob], fileName, { type });
         }
       } else {
-        // Expo SDK 57 usa un FormData que requiere Blob/bytes. ExpoFile implementa
-        // ambos y evita "Unsupported FormDataPart implementation" en iOS.
-        const fileObj = file as { uri: string; name: string; type: string };
+        // Expo SDK 57 requiere un Blob real en FormData. ExpoFile implementa
+        // Blob y evita "Unsupported FormDataPart implementation".
+        const fileObj = file as { uri: string; name: string; type: string; size?: number };
         if (!fileObj.uri) {
           throw new Error("La imagen no contiene URI válida");
         }
-        fileData = new ExpoFile(fileObj.uri);
+        const nativeFile = new ExpoFile(fileObj.uri);
+        fileData = nativeFile;
       }
 
       // Subir archivo a Appwrite Storage
@@ -90,11 +91,19 @@ class FilesService {
             : fileData;
 
         try {
-          response = await storage.createFile(
-            bucketId,
-            fileId,
-            fileToUpload as any,
-          );
+          response = await Promise.race([
+            storage.createFile({
+              bucketId,
+              fileId,
+              file: fileToUpload as any,
+            }),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("La carga tardÃ³ demasiado. Verifica tu conexiÃ³n e intenta nuevamente.")),
+                45_000,
+              ),
+            ),
+          ]);
         } catch (createFileError: any) {
           throw createFileError;
         }
@@ -150,7 +159,7 @@ Formato archivo: ${Platform.OS === "web" ? "File web" : "ExpoFile nativo"}`;
   }
 
   async uploadMultipleImages(
-    files: (File | { uri: string; name: string; type: string })[],
+    files: (File | { uri: string; name: string; type: string; size?: number })[],
     bucketType: "images" | "ine_images" | "catalog_images" | "request_documents" = "images",
   ): Promise<FileUploadResponse[]> {
     try {
