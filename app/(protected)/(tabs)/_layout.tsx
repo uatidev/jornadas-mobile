@@ -72,7 +72,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="secretaria/index"
         options={{
-          title: "Secretaria",
+          title: "Secretaría",
           href: canSeeSecretaryTab ? "/secretaria" : null,
           tabBarIcon: ({ color, size }) => (
             <Monicon
