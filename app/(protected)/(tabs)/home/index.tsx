@@ -9,7 +9,7 @@ import { useQuery } from "@tanstack/react-query";
 import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { ChevronRight } from "lucide-react-native";
+import { Building2, ChevronRight } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -27,12 +27,20 @@ function ServiceCardImage({ imageUrl }: { imageUrl?: string }) {
           styles.defaultServiceBackground,
         ]}
       >
-        <View style={styles.defaultServiceTopBorder} />
-        <View style={styles.defaultServiceBottomBorder} />
-        <View style={styles.defaultServiceTopRing} />
-        <View style={styles.defaultServiceBottomRing} />
-        <View style={styles.defaultServiceDiamond} />
-        <View style={styles.defaultServiceLine} />
+        <View style={styles.defaultServiceAccent} />
+        <View style={styles.defaultServiceSurface} />
+        <View style={styles.defaultServiceWatermark}>
+          <Building2 color="rgba(255,255,255,0.13)" size={82} strokeWidth={1.25} />
+        </View>
+        <View style={styles.defaultServiceInstitution}>
+          <View style={styles.defaultServiceSeal}>
+            <Building2 color="#d8b46a" size={17} strokeWidth={1.8} />
+          </View>
+          <View>
+            <Text style={styles.defaultServiceInstitutionTitle}>SERVICIO INSTITUCIONAL</Text>
+            <Text style={styles.defaultServiceInstitutionSubtitle}>SECRETARÍA DE TURISMO</Text>
+          </View>
+        </View>
       </View>
     );
   }
@@ -64,62 +72,60 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(0, 0, 0, 0.18)",
   },
   defaultServiceBackground: {
-    backgroundColor: "#981646",
+    backgroundColor: "#741433",
   },
-  defaultServiceTopBorder: {
+  defaultServiceAccent: {
     position: "absolute",
     top: 0,
     left: 0,
     right: 0,
-    height: 5,
-    // backgroundColor: "",
+    height: 4,
+    backgroundColor: "#d8b46a",
   },
-  defaultServiceBottomBorder: {
+  defaultServiceSurface: {
     position: "absolute",
+    top: 4,
     bottom: 0,
-    left: 0,
-    right: 0,
-    height: 3,
-    // backgroundColor: "rgba(214, 173, 96, 0.72)",
+    left: 4,
+    width: 1,
+    backgroundColor: "rgba(255,255,255,0.22)",
   },
-  defaultServiceTopRing: {
+  defaultServiceWatermark: {
     position: "absolute",
-    top: -74,
-    right: -38,
-    width: 178,
-    height: 178,
-    borderRadius: 89,
-    borderWidth: 22,
-    borderColor: "rgba(214, 173, 96, 0.28)",
+    right: 15,
+    bottom: 8,
   },
-  defaultServiceBottomRing: {
+  defaultServiceInstitution: {
     position: "absolute",
-    bottom: -88,
-    left: -48,
-    width: 184,
-    height: 184,
-    borderRadius: 92,
-    borderWidth: 28,
-    borderColor: "rgba(248, 226, 171, 0.13)",
+    left: 14,
+    top: 64,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    opacity: 0.82,
   },
-  defaultServiceDiamond: {
-    position: "absolute",
-    top: 48,
-    right: 38,
-    width: 66,
-    height: 66,
-    borderWidth: 2,
-    borderColor: "rgba(248, 226, 171, 0.34)",
-    transform: [{ rotate: "45deg" }],
+  defaultServiceSeal: {
+    width: 29,
+    height: 29,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "rgba(216,180,106,0.62)",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(74,10,36,0.3)",
   },
-  defaultServiceLine: {
-    position: "absolute",
-    top: 77,
-    right: -25,
-    width: 190,
-    height: 2,
-    backgroundColor: "rgba(214, 173, 96, 0.32)",
-    transform: [{ rotate: "-24deg" }],
+  defaultServiceInstitutionTitle: {
+    color: "rgba(255,255,255,0.92)",
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 1.2,
+  },
+  defaultServiceInstitutionSubtitle: {
+    color: "rgba(216,180,106,0.92)",
+    fontSize: 7,
+    fontWeight: "600",
+    letterSpacing: 0.8,
+    marginTop: 2,
   },
 });
 

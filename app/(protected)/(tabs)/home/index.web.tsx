@@ -217,7 +217,7 @@ export default function CapturistaWebDashboard() {
                   </Text>
                 </View>
                 <Input
-                  aria-label="Buscar trámite"
+                  aria-label="Acción no reconocida"
                   className={compact ? "w-full" : "w-96"}
                   value={search}
                   onChangeText={setSearch}
@@ -275,7 +275,7 @@ export default function CapturistaWebDashboard() {
                           {availability.label}
                         </Text>
                         <Button disabled={!activeEventId} onPress={() => startRequest(service)}>
-                          <Text>{availability.open ? "Capturar solicitud" : "Capturar con prioridad"}</Text>
+                          <Text>{availability.open ? "Capturar solicitud" : "Registrar para próxima apertura"}</Text>
                         </Button>
                       </View>
                     );

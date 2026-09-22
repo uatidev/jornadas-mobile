@@ -1,4 +1,4 @@
-export type RequestStatus = "borrador" | "enviada" | "recibida" | "en_revision" | "requiere_informacion" | "aprobada" | "rechazada" | "cancelada" | "concluida";
+export type RequestStatus = "borrador" | "enviada" | "en_espera_apertura" | "recibida" | "en_revision" | "requiere_informacion" | "aprobada" | "rechazada" | "cancelada" | "concluida";
 
 export interface ServiceRequest {
   id: string;
@@ -14,6 +14,7 @@ export interface ServiceRequest {
   eventFolio?: string;
   programFolio?: string;
   priorityOnReopening?: boolean;
+  waitingForOpening?: boolean;
   finalResult?: string;
   discontinuationReason?: string;
   receivedBenefit?: boolean;

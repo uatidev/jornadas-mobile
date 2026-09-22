@@ -64,6 +64,7 @@ export default function NewRequest() {
   const [folio, setFolio] = useState<string>();
   const [eventFolio, setEventFolio] = useState<string>();
   const [priorityOnReopening, setPriorityOnReopening] = useState(false);
+  const [waitingForOpening, setWaitingForOpening] = useState(false);
   const [priorityRequested, setPriorityRequested] = useState(false);
   const [emailMessage, setEmailMessage] = useState<string>();
   const [receipt, setReceipt] = useState<RequestReceipt>();
@@ -160,6 +161,7 @@ export default function NewRequest() {
       setFolio(result.programFolio || result.eventFolio || result.folio);
       setEventFolio(result.eventFolio);
       setPriorityOnReopening(Boolean(result.priorityOnReopening));
+      setWaitingForOpening(Boolean(result.waitingForOpening));
       setEmailMessage(result.emailMessage);
       setReceipt(result.receipt);
       await Promise.all([
@@ -186,6 +188,7 @@ export default function NewRequest() {
     setFolio(undefined);
     setEventFolio(undefined);
     setPriorityOnReopening(false);
+    setWaitingForOpening(false);
     setPriorityRequested(false);
     setEmailMessage(undefined);
     setReceipt(undefined);
@@ -234,6 +237,7 @@ export default function NewRequest() {
                 folio={folio}
                 eventFolio={eventFolio}
                 priorityOnReopening={priorityOnReopening}
+                waitingForOpening={waitingForOpening}
                 emailMessage={emailMessage}
                 receipt={receipt}
                 onClose={() => router.replace("/home" as any)}

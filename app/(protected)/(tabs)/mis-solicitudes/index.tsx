@@ -265,7 +265,7 @@ export default function MisSolicitudesScreen() {
                             <Text className="mt-1 font-semibold">{serviceNames[request.serviceId] || "Trámite no disponible"}</Text>
                             <Text className="mt-2 self-start rounded-full bg-muted px-2 py-1 text-[10px] font-semibold">Trámite regular</Text>
                           </View>
-                          <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">{request.status.replaceAll("_", " ")}</Text>
+                          <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">{request.status === "en_espera_apertura" ? "En espera de apertura" : request.status.replaceAll("_", " ")}</Text>
                         </View>
                         <View className="mt-3 flex-row items-center justify-between gap-3">
                           <Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleString("es-MX")}</Text>

@@ -98,7 +98,7 @@ const sendSecretaryConfirmation = async ({ to, folio, eventFolio, subject, event
     to,
     subject: `Atención de Secretaría registrada · ${folio}`,
     text: [
-      "COMPROBANTE DE ATENCIÓN DE SECRETARÍA",
+      "COMPROBANTE DE ATENCIÓN CIUDADANA",
       "Tu solicitud fue registrada correctamente.",
       "",
       `Folio de la solicitud: ${folio}`,
@@ -526,12 +526,13 @@ export default async ({ req, res, log, error }) => {
       const institutionalPriority = ["secretaria", "capturista_secretaria"].includes(
         profile.rolSistema,
       );
-      const priorityOnReopening =
-        institutionalPriority ||
-        (canChoosePriority && input.priority === true) ||
+      const waitingForOpening =
         !service.activo ||
         (service.vigenciaInicio && now < new Date(service.vigenciaInicio).getTime()) ||
         (service.vigenciaFin && now > new Date(service.vigenciaFin).getTime());
+      const priorityOnReopening =
+        institutionalPriority ||
+        (canChoosePriority && input.priority === true);
       const unit = await call(
         "GET",
         `/databases/${DATABASE_ID}/collections/unidades_administrativas/documents/${service.unidadAdministrativaId}`,
@@ -598,14 +599,17 @@ export default async ({ req, res, log, error }) => {
             solicitanteUserId: userId,
             estatus: "enviada",
             datosSolicitante: JSON.stringify(input.applicantData || {}),
-            datosTramite: JSON.stringify(input.requestData || {}),
+            datosTramite: JSON.stringify({
+              ...(input.requestData || {}),
+              ...(waitingForOpening ? { __seguimiento: { enEsperaApertura: true } } : {}),
+            }),
             fechaSolicitud: stamp.toISOString(),
             eventoAtencionId: event.$id,
             folioEvento: eventFolio,
             ...(programFolio ? { folioPrograma: programFolio } : {}),
             prioridadReapertura: Boolean(priorityOnReopening),
-            ...(priorityOnReopening
-              ? { observaciones: "Solicitud registrada con prioridad" }
+            ...((waitingForOpening || priorityOnReopening)
+              ? { observaciones: [waitingForOpening ? "Solicitud en espera de apertura" : "", priorityOnReopening ? "Prioridad institucional" : ""].filter(Boolean).join(" · ") }
               : {}),
           },
         },
@@ -619,7 +623,7 @@ export default async ({ req, res, log, error }) => {
           data: {
             solicitudId: request.$id,
             estatusNuevo: "enviada",
-            comentario: "Solicitud registrada",
+            comentario: waitingForOpening ? "Solicitud registrada en espera de apertura" : "Solicitud registrada",
             realizadoPorUserId: userId,
             fecha: stamp.toISOString(),
           },
@@ -667,7 +671,8 @@ export default async ({ req, res, log, error }) => {
         folio,
         eventFolio,
         programFolio,
-        status: request.estatus,
+        status: waitingForOpening ? "en_espera_apertura" : request.estatus,
+        waitingForOpening: Boolean(waitingForOpening),
         priorityOnReopening: Boolean(priorityOnReopening),
         emailSent: emailResult.sent,
         emailMessage: emailResult.sent
@@ -676,7 +681,7 @@ export default async ({ req, res, log, error }) => {
         receipt: {
           serviceName: service.nombre,
           serviceType: service.tipo,
-          status: request.estatus,
+          status: waitingForOpening ? "en_espera_apertura" : request.estatus,
           requestedAt: stamp.toISOString(),
           attendedBy: profile.nombre || account.name || account.email,
           unitName: unit.nombre,
@@ -1155,6 +1160,7 @@ export default async ({ req, res, log, error }) => {
           return json(400, { message: "La procedencia no es válida" });
         data = {
           datosSolicitante: JSON.stringify(input.applicantData || {}),
+          ...(Array.isArray(input.documents) ? { documentos: JSON.stringify(input.documents) } : {}),
           asunto: String(input.subject).trim(),
           procedencia: input.source,
           numeroOficio: String(input.officeNumber || "").trim() || null,
@@ -1235,6 +1241,7 @@ export default async ({ req, res, log, error }) => {
       }
       const tracking = {
         ...(requestData.__seguimiento || {}),
+        enEsperaApertura: false,
         resultadoFinal: input.finalResult || null,
         motivoNoContinuidad: input.discontinuationReason || null,
         apoyoRecibido:

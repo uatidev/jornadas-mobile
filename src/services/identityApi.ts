@@ -28,6 +28,7 @@ export interface SubmittedRequest {
   programFolio?: string;
   status: string;
   priorityOnReopening?: boolean;
+  waitingForOpening?: boolean;
   emailSent?: boolean;
   emailMessage?: string;
   receipt?: RequestReceipt;
@@ -142,6 +143,7 @@ export const identityApi = {
     execute({ action: "adminUpdateRequestData", requestId, applicantData, requestData, reason }),
   adminUpdateSecretaryRequestData: (requestId: string, data: {
     applicantData: Record<string, string>;
+    documents?: SecretaryRequestDocument[];
     subject: string;
     source: "gobernador" | "oficina_gubernamental" | "otra";
     officeNumber?: string;

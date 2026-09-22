@@ -1,11 +1,14 @@
 "use client";
 
+import { DynamicGlobalForm } from "@/src/components/modules/new-request";
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { adminService } from "@/src/services/admin";
+import { filesService } from "@/src/services/files";
 import { identityApi } from "@/src/services/identityApi";
+import type { SecretaryRequestDocument } from "@/src/types/request";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -60,10 +63,24 @@ export default function SecretaryRequestAdminDetail() {
   }, [item, editing, receiptEmail]);
 
   const save = useMutation({
-    mutationFn: () => identityApi.adminUpdateSecretaryRequestData(requestId!, {
-      applicantData, subject, source, officeNumber, officeDate, notes, reason,
-    }),
+    mutationFn: () => {
+      const formDocuments = Object.values(applicantData).flatMap((value) => {
+        try {
+          const parsed = JSON.parse(value) as SecretaryRequestDocument | SecretaryRequestDocument[];
+          return (Array.isArray(parsed) ? parsed : [parsed]).filter((document) => Boolean(document?.fileId));
+        } catch {
+          return [];
+        }
+      });
+      const documents = [...(item?.documents || []), ...formDocuments].filter(
+        (document, index, all) => all.findIndex((candidate) => candidate.fileId === document.fileId) === index,
+      );
+      return identityApi.adminUpdateSecretaryRequestData(requestId!, {
+        applicantData, documents, subject, source, officeNumber, officeDate, notes, reason,
+      });
+    },
     onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["secretary-request-detail", requestId] });
       await queryClient.invalidateQueries({ queryKey: ["admin", "secretary-requests"] });
       setEditing(false);
       setReason("");
@@ -88,6 +105,22 @@ export default function SecretaryRequestAdminDetail() {
     },
     onError: (cause: Error) => setNotice(cause.message),
   });
+  const openDocument = async (document: SecretaryRequestDocument) => {
+    setNotice("");
+    try {
+      await filesService.openAuthenticatedFile(document.fileId, document.type);
+    } catch (cause) {
+      setNotice(cause instanceof Error ? cause.message : "No fue posible abrir el archivo.");
+    }
+  };
+  const parseDocuments = (value: string): SecretaryRequestDocument[] => {
+    try {
+      const parsed = JSON.parse(value) as SecretaryRequestDocument | SecretaryRequestDocument[];
+      return (Array.isArray(parsed) ? parsed : [parsed]).filter((document) => Boolean(document?.fileId));
+    } catch {
+      return [];
+    }
+  };
 
   if (!canView) return <Redirect href="/admin" />;
   const selectedEvent = events.data?.find((event) => event.id === item?.eventId);
@@ -102,7 +135,7 @@ export default function SecretaryRequestAdminDetail() {
       {!query.isLoading && !item ? <Text className="rounded-xl bg-destructive/10 p-4 text-destructive">No se encontró la solicitud.</Text> : null}
       {item ? <View className="grid grid-cols-[minmax(0,1fr)_360px] items-start gap-5 max-lg:grid-cols-1">
         <View className="min-w-0 gap-5">
-        <View className="rounded-2xl border border-border bg-card p-5"><View className="flex-row justify-between gap-4"><View><Text className="text-2xl font-bold">{item.folio}</Text><Text className="mt-1 text-muted-foreground">{new Date(item.createdAt).toLocaleString("es-MX")}</Text></View><Text className="font-semibold capitalize text-primary">{item.status.replaceAll("_", " ")}</Text></View><Text className="mt-4">Capturó: {item.capturedByName}</Text><Text className="mt-1">Documentos adjuntos: {item.documents.length}</Text></View>
+        <View className="rounded-2xl border border-border bg-card p-5"><View className="flex-row justify-between gap-4"><View><Text className="text-2xl font-bold">{item.folio}</Text><Text className="mt-1 text-muted-foreground">{new Date(item.createdAt).toLocaleString("es-MX")}</Text></View><Text className="font-semibold capitalize text-primary">{item.status.replaceAll("_", " ")}</Text></View><Text className="mt-4">Capturó: {item.capturedByName}</Text><Text className="mt-1">Documentos adjuntos: {item.documents.length}</Text>{item.documents.length ? <View className="mt-3 gap-2">{item.documents.map((document) => <Pressable key={document.fileId} onPress={() => openDocument(document)} className="rounded-lg border border-border bg-background px-3 py-2"><Text className="text-primary">Abrir: {document.name}</Text></Pressable>)}</View> : null}</View>
         <View className="flex-row flex-wrap gap-x-8 gap-y-2 border-b border-border pb-4">
           <Text><Text className="font-semibold">Folio del evento:</Text> {item.eventFolio || "Sin folio"}</Text>
           <Text><Text className="font-semibold">Evento:</Text> {selectedEvent?.name || "Evento no disponible"}</Text>
@@ -124,11 +157,12 @@ export default function SecretaryRequestAdminDetail() {
           <View className="gap-2"><Text className="font-semibold">Procedencia</Text>{editing ? <View className="flex-row gap-2">{(["gobernador", "oficina_gubernamental", "otra"] as const).map((value) => <Pressable key={value} onPress={() => setSource(value)} className={`rounded-lg border px-3 py-2 ${source === value ? "border-primary bg-primary/10" : "border-border"}`}><Text className="capitalize">{value.replaceAll("_", " ")}</Text></Pressable>)}</View> : <Text className="capitalize">{item.source.replaceAll("_", " ")}</Text>}</View>
           {editing ? <><Input value={officeNumber} onChangeText={setOfficeNumber} placeholder="Número de oficio" /><Input value={officeDate} onChangeText={setOfficeDate} placeholder="Fecha AAAA-MM-DD" /><Input value={notes} onChangeText={setNotes} placeholder="Observaciones" multiline className="min-h-24" /></> : <><Text>Número de oficio: {item.officeNumber || "—"}</Text><Text>Fecha del oficio: {item.officeDate || "—"}</Text><Text>Observaciones: {item.notes || "—"}</Text></>}
         </View>
-        <View className="gap-3 rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Datos del solicitante</Text>{Array.from(new Set([...(globalForm.data?.fields || []).map((field) => field.key), ...Object.keys(applicantData)])).map((key) => {
+        {editing ? <DynamicGlobalForm fields={globalForm.data?.fields || []} values={applicantData} onChange={setApplicantData} title="Datos del solicitante" description="Corrige la información y agrega o reemplaza los archivos necesarios." /> : <View className="gap-3 rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Datos del solicitante</Text>{Array.from(new Set([...(globalForm.data?.fields || []).map((field) => field.key), ...Object.keys(applicantData)])).map((key) => {
           const field = globalForm.data?.fields.find((candidate) => candidate.key === key);
           const value = applicantData[key] || "";
-          return <View key={key} className="gap-1"><Text className="text-xs font-bold uppercase text-muted-foreground">{field?.label || key.replaceAll("_", " ")}{field?.required === false ? " (opcional)" : ""}</Text>{field?.type === "file" ? <Text>{value ? "Archivo protegido" : "Sin archivo"}</Text> : editing ? <Input value={value} onChangeText={(next) => setApplicantData((current) => ({ ...current, [key]: next }))} placeholder={field?.placeholder || "Sin respuesta"} /> : <Text>{value || "Sin respuesta"}</Text>}</View>;
-        })}</View>
+          const fieldDocuments = field?.type === "file" ? parseDocuments(value) : [];
+          return <View key={key} className="gap-1"><Text className="text-xs font-bold uppercase text-muted-foreground">{field?.label || key.replaceAll("_", " ")}{field?.required === false ? " (opcional)" : ""}</Text>{field?.type === "file" ? (fieldDocuments.length ? <View className="gap-2">{fieldDocuments.map((document) => <Pressable key={document.fileId} onPress={() => openDocument(document)} className="rounded-lg border border-border px-3 py-2"><Text className="text-primary">Abrir: {document.name}</Text></Pressable>)}</View> : <Text>Sin archivo</Text>) : <Text>{value || "Sin respuesta"}</Text>}</View>;
+        })}</View>}
         {user?.role === "super_admin" ? <View className="gap-3 rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Reenviar comprobante</Text><Text className="text-sm text-muted-foreground">Puedes usar el correo corregido antes de reenviar el folio.</Text><Input value={receiptEmail} onChangeText={setReceiptEmail} autoCapitalize="none" keyboardType="email-address" placeholder="persona@correo.com" /><View className="items-start"><Button disabled={resend.isPending || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(receiptEmail.trim())} onPress={() => resend.mutate()}><Text>{resend.isPending ? "Enviando..." : "Reenviar folio"}</Text></Button></View></View> : null}
         {editing ? <View className="gap-3 rounded-2xl border border-amber-300 bg-amber-50 p-5"><Text className="font-bold text-amber-950">Motivo de la corrección *</Text><Input value={reason} onChangeText={setReason} placeholder="Explica qué se corrigió y por qué" /><Button disabled={save.isPending || !subject.trim() || reason.trim().length < 5} onPress={() => save.mutate()}><Text>{save.isPending ? "Guardando..." : "Guardar corrección"}</Text></Button></View> : null}
         </View>

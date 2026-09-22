@@ -246,8 +246,8 @@ export function RequestIntro({
           </Text>
           <Text className="mt-1 text-amber-800">
             {service?.opensAt && new Date(service.opensAt).getTime() > now
-              ? `Se marcará como prioritaria para la apertura del ${new Date(service.opensAt).toLocaleDateString("es-MX")}.`
-              : "Se marcará como prioritaria para revisarla cuando el programa vuelva a abrir."}
+              ? `Quedará en espera para revisarla a partir del ${new Date(service.opensAt).toLocaleDateString("es-MX")}.`
+              : "Quedará en espera para revisarla cuando el programa vuelva a abrir."}
           </Text>
         </View>
       )}
@@ -258,7 +258,7 @@ export function RequestIntro({
             <Text>Regresar</Text>
           </Button>
           <Button onPress={onStart} className="flex-1">
-            <Text>{isOpen ? "Iniciar trámite" : "Registrar con prioridad"}</Text>
+            <Text>{isOpen ? "Iniciar trámite" : "Registrar para próxima apertura"}</Text>
           </Button>
         </View>
       )}
@@ -309,6 +309,7 @@ export function RequestSuccess({
   folio,
   eventFolio,
   priorityOnReopening,
+  waitingForOpening,
   emailMessage,
   receipt,
   onClose,
@@ -318,6 +319,7 @@ export function RequestSuccess({
   folio?: string;
   eventFolio?: string;
   priorityOnReopening?: boolean;
+  waitingForOpening?: boolean;
   emailMessage?: string;
   receipt?: import("@/src/services/identityApi").RequestReceipt;
   onClose: () => void;
@@ -354,6 +356,12 @@ export function RequestSuccess({
           <Text className="mt-1 text-center text-sm text-amber-800">
             La unidad responsable podrá identificarla y atenderla con prioridad.
           </Text>
+        </View>
+      ) : null}
+      {waitingForOpening ? (
+        <View className="rounded-xl border border-blue-300 bg-blue-50 p-4">
+          <Text className="text-center font-semibold text-blue-900">En espera de apertura</Text>
+          <Text className="mt-1 text-center text-sm text-blue-800">La solicitud será revisada cuando el programa vuelva a estar disponible.</Text>
         </View>
       ) : null}
       {receipt ? (

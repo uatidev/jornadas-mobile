@@ -77,14 +77,32 @@ export function DynamicGlobalForm({
     const result = await DocumentPicker.getDocumentAsync({
       type: fileTypes,
       copyToCacheDirectory: true,
-      multiple: false,
+      multiple: true,
     });
-    if (result.canceled || !result.assets[0]) return;
-    const asset = result.assets[0];
-    await uploadPickedFile(
-      field,
-      asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream" },
-    );
+    if (result.canceled || !result.assets.length) return;
+    const current = uploadedDocuments(values[field.key]);
+    const available = Math.max(0, 5 - current.length);
+    const assets = result.assets.slice(0, available);
+    if (!assets.length) {
+      setUploadErrors((errors) => ({ ...errors, [field.key]: "Puedes adjuntar hasta 5 archivos." }));
+      return;
+    }
+    setUploadingKey(field.key);
+    try {
+      const uploaded = await filesService.uploadMultipleImages(
+        assets.map((asset) => asset.file || { uri: asset.uri, name: asset.name, type: asset.mimeType || "application/octet-stream", size: asset.size }),
+        "request_documents",
+      );
+      const documents = uploaded.map((item) => ({ fileId: item.filename, name: item.originalname, type: item.mimetype, size: item.size, url: item.url }));
+      setValue(field.key, JSON.stringify([...current, ...documents]));
+      if (result.assets.length > available) {
+        setUploadErrors((errors) => ({ ...errors, [field.key]: "Sólo se agregaron archivos hasta completar el límite de 5." }));
+      }
+    } catch (cause) {
+      setUploadErrors((errors) => ({ ...errors, [field.key]: cause instanceof Error ? cause.message : "No fue posible subir los archivos" }));
+    } finally {
+      setUploadingKey(null);
+    }
   };
   const pickImage = async (field: ServiceFormField) => {
     setUploadErrors((current) => ({ ...current, [field.key]: "" }));
@@ -188,8 +206,8 @@ export function DynamicGlobalForm({
                     </Button>
                   ) : null}
                   {field.fileType !== "image" ? (
-                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key} onPress={() => pickDocument(field)}>
-                      <Text>{uploadingKey === field.key ? "Subiendo..." : value ? "Cambiar por un documento" : "Elegir documento"}</Text>
+                    <Button className="min-w-44 flex-1" variant="outline" disabled={uploadingKey === field.key || attachedDocuments.length >= 5} onPress={() => pickDocument(field)}>
+                      <Text>{uploadingKey === field.key ? "Subiendo..." : attachedDocuments.length ? "Agregar documentos" : "Elegir documentos"}</Text>
                     </Button>
                   ) : null}
                 </View>
@@ -204,7 +222,7 @@ export function DynamicGlobalForm({
                 ))}
                 {uploadErrors[field.key] ? <Text className="text-sm text-destructive">{uploadErrors[field.key]}</Text> : null}
                 <Text className="text-xs text-muted-foreground">
-                  {field.fileType === "document" ? "PDF, Word o Excel. Máximo 15 MB." : `Hasta 5 fotografías (${attachedDocuments.length}/5). Máximo 15 MB por imagen.`}
+                  {field.fileType === "document" ? `Hasta 5 archivos (${attachedDocuments.length}/5). PDF, Word o Excel; máximo 15 MB por archivo.` : `Hasta 5 fotografías (${attachedDocuments.length}/5). Máximo 15 MB por imagen.`}
                 </Text>
               </View>
             ) : isChoice ? (
