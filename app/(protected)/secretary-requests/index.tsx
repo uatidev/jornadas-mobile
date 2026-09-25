@@ -98,6 +98,7 @@ export default function SecretaryRequestsScreen() {
   const [section, setSection] = useState<"new" | "queue">(
     user?.role === "enlace" || !canCreate ? "queue" : "new",
   );
+  const activeSection = compact && canCreate ? "new" : section;
   const [applicantData, setApplicantData] = useState<Record<string, string>>({});
   const [selectedEventId, setSelectedEventId] = useState("");
   const [subject, setSubject] = useState("");
@@ -142,10 +143,10 @@ export default function SecretaryRequestsScreen() {
   const queue = useQuery({
     queryKey: ["secretary-requests", user?.role],
     queryFn: identityApi.listSecretaryRequests,
-    enabled: allowed && section === "queue",
+    enabled: allowed && activeSection === "queue",
     refetchOnMount: "always",
     refetchOnWindowFocus: true,
-    refetchInterval: section === "queue" ? 10_000 : false,
+    refetchInterval: activeSection === "queue" ? 10_000 : false,
   });
   const submit = useMutation({
     mutationFn: () => identityApi.submitSecretaryRequest({ applicantData, subject, source, officeNumber, officeDate, notes, route, eventId: effectiveEventId, recipientEmail, documents: requestDocuments }),
@@ -205,9 +206,9 @@ export default function SecretaryRequestsScreen() {
 
   return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1 bg-background">
     <View className="border-b border-border px-4 pb-4" style={{ paddingTop: Math.max(insets.top, 12) }}><View className={`mx-auto w-full max-w-4xl ${compact ? "gap-3" : "flex-row items-center justify-between"}`}><View className="min-w-0 flex-1"><Text className={`${compact ? "text-xl" : "text-2xl"} font-bold`}>Atención de Secretaría</Text><Text className="mt-1 text-sm text-muted-foreground">Oficios y solicitudes institucionales prioritarias</Text></View>{!renderedInsideSecretaryTab ? <Button className={compact ? "w-full" : ""} variant="outline" onPress={() => router.back()}><Text>Regresar</Text></Button> : null}</View></View>
-    {canCreate ? <View className={`flex-row border-b border-border ${compact ? "px-2" : "px-6"}`}><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "new" }} onPress={() => setSection("new")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "new" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Nueva solicitud</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "queue" }} onPress={() => setSection("queue")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "queue" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">{compact ? "Bandeja" : "Bandeja administrativa"}</Text></Pressable></View> : null}
+    {canCreate && !compact ? <View className="flex-row border-b border-border px-6"><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "new" }} onPress={() => setSection("new")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "new" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Nueva solicitud</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "queue" }} onPress={() => setSection("queue")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "queue" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Bandeja administrativa</Text></Pressable></View> : null}
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: compact ? 16 : 24, paddingBottom: Math.max(insets.bottom + 32, 64) }}><View className="mx-auto w-full max-w-4xl gap-5">
-      {section === "new" ? <>
+      {activeSection === "new" ? <>
         <View className="gap-3 rounded-2xl border border-border bg-card p-4">
           <Text className="text-xl font-bold">Evento de atención *</Text>
           <Text className="text-sm text-muted-foreground">La solicitud quedará registrada dentro del evento seleccionado.</Text>

@@ -34,13 +34,14 @@ const SelectTrigger = React.forwardRef<
   SelectPrimitive.TriggerProps & {
     children?: React.ReactNode;
     size?: "default" | "sm";
+    iconClassName?: string;
   }
->(({ className, children, size = "default", ...props }, ref) => {
+>(({ className, children, size = "default", iconClassName, ...props }, ref) => {
   return (
     <SelectPrimitive.Trigger
       ref={ref}
       className={cn(
-        "border-input dark:bg-input/30 dark:active:bg-input/50 bg-background flex h-10 flex-row items-center justify-between gap-2 rounded-md border px-3 py-2 shadow-sm shadow-black/5 sm:h-9",
+        "border-input trnasparent bg-card/30 dark:active:bg-card/50 bg-background flex h-10 flex-row items-center justify-between gap-2 rounded-md border px-3 py-2 shadow-sm shadow-black/5 sm:h-9",
         Platform.select({
           web: "focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:hover:bg-input/50 w-fit whitespace-nowrap text-sm outline-none transition-[color,box-shadow] focus-visible:ring-[3px] disabled:cursor-not-allowed [&_svg]:pointer-events-none [&_svg]:shrink-0",
         }),
@@ -54,7 +55,7 @@ const SelectTrigger = React.forwardRef<
       <Icon
         as={ChevronDown}
         aria-hidden={true}
-        className="text-muted-foreground size-4"
+        className={cn("text-muted-foreground size-4", iconClassName)}
       />
     </SelectPrimitive.Trigger>
   );
@@ -211,12 +212,12 @@ function SelectContent({
                     native: "p-1",
                   }),
                   position === "popper" &&
-                    Platform.select({
-                      web: cn(
-                        props.side === "bottom" && "translate-y-1",
-                        props.side === "top" && "-translate-y-1"
-                      ),
-                    }),
+                  Platform.select({
+                    web: cn(
+                      props.side === "bottom" && "translate-y-1",
+                      props.side === "top" && "-translate-y-1"
+                    ),
+                  }),
                   className
                 )}
                 position={position}
@@ -227,12 +228,12 @@ function SelectContent({
                   className={cn(
                     "p-1",
                     position === "popper" &&
-                      cn(
-                        "w-full",
-                        Platform.select({
-                          web: "h-[var(--radix-select-trigger-height)] min-w-[var(--radix-select-trigger-width)]",
-                        })
-                      )
+                    cn(
+                      "w-full",
+                      Platform.select({
+                        web: "h-[var(--radix-select-trigger-height)] min-w-[var(--radix-select-trigger-width)]",
+                      })
+                    )
                   )}
                 >
                   {children}
@@ -293,8 +294,8 @@ function SelectItem({
         native: {
           paddingVertical: 16,
           paddingHorizontal: 16,
-          borderBottomWidth: 1,
-          borderBottomColor: borderColor,
+          // borderBottomWidth: 1,
+          // borderBottomColor: borderColor,
         },
       })}
       label={itemLabel}
@@ -419,5 +420,6 @@ export {
   SelectSeparator,
   SelectTrigger,
   SelectValue,
-  type Option,
+  type Option
 };
+

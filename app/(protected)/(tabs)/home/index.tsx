@@ -6,126 +6,23 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { identityApi } from "@/src/services/identityApi";
 import type { AttentionEvent } from "@/src/types/catalog";
 import { useQuery } from "@tanstack/react-query";
-import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
-import { Building2, ChevronRight } from "lucide-react-native";
 import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-function ServiceCardImage({ imageUrl }: { imageUrl?: string }) {
-  const [hasError, setHasError] = useState(false);
-  const showsUploadedImage = Boolean(imageUrl && !hasError);
-
-  if (!showsUploadedImage) {
-    return (
-      <View
-        pointerEvents="none"
-        style={[
-          StyleSheet.absoluteFill,
-          styles.defaultServiceBackground,
-        ]}
-      >
-        <View style={styles.defaultServiceAccent} />
-        <View style={styles.defaultServiceSurface} />
-        <View style={styles.defaultServiceWatermark}>
-          <Building2 color="rgba(255,255,255,0.13)" size={82} strokeWidth={1.25} />
-        </View>
-        <View style={styles.defaultServiceInstitution}>
-          <View style={styles.defaultServiceSeal}>
-            <Building2 color="#d8b46a" size={17} strokeWidth={1.8} />
-          </View>
-          <View>
-            <Text style={styles.defaultServiceInstitutionTitle}>SERVICIO INSTITUCIONAL</Text>
-            <Text style={styles.defaultServiceInstitutionSubtitle}>SECRETARÍA DE TURISMO</Text>
-          </View>
-        </View>
-      </View>
-    );
-  }
-
-  return (
-    <>
-      <Image
-        source={{ uri: imageUrl }}
-        resizeMode="contain"
-        style={[StyleSheet.absoluteFill, { backgroundColor: "#ffffff" }]}
-        onError={() => setHasError(true)}
-      />
-      <BlurView
-        pointerEvents="none"
-        intensity={5}
-        tint="dark"
-        style={StyleSheet.absoluteFill}
-      />
-      <View
-        pointerEvents="none"
-        style={[StyleSheet.absoluteFill, styles.uploadedImageShade]}
-      />
-    </>
-  );
-}
+const DEFAULT_SERVICE_LOGO = require("@/src/assets/images/logo-turismo.png");
 
 const styles = StyleSheet.create({
-  uploadedImageShade: {
-    backgroundColor: "rgba(0, 0, 0, 0.18)",
+  serviceCardLogoContainer: {
+    width: 140,
+    height: 42,
   },
-  defaultServiceBackground: {
-    backgroundColor: "#741433",
-  },
-  defaultServiceAccent: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 4,
-    backgroundColor: "#d8b46a",
-  },
-  defaultServiceSurface: {
-    position: "absolute",
-    top: 4,
-    bottom: 0,
-    left: 4,
-    width: 1,
-    backgroundColor: "rgba(255,255,255,0.22)",
-  },
-  defaultServiceWatermark: {
-    position: "absolute",
-    right: 15,
-    bottom: 8,
-  },
-  defaultServiceInstitution: {
-    position: "absolute",
-    left: 14,
-    top: 64,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    opacity: 0.82,
-  },
-  defaultServiceSeal: {
-    width: 29,
-    height: 29,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "rgba(216,180,106,0.62)",
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(74,10,36,0.3)",
-  },
-  defaultServiceInstitutionTitle: {
-    color: "rgba(255,255,255,0.92)",
-    fontSize: 8,
-    fontWeight: "700",
-    letterSpacing: 1.2,
-  },
-  defaultServiceInstitutionSubtitle: {
-    color: "rgba(216,180,106,0.92)",
-    fontSize: 7,
-    fontWeight: "600",
-    letterSpacing: 0.8,
-    marginTop: 2,
+  serviceCardLogo: {
+    width: "100%",
+    height: "100%",
+    transform: [{ scale: 2.4 }]
   },
 });
 
@@ -254,18 +151,19 @@ export default function HomeScreen() {
         onEventChange={handleEventChange}
       />
 
-      <View className="border-b border-border bg-background px-6 py-3">
-        <View className="gap-2">
-          {/* <Text className="font-bold">Buscar trámite, programa o servicio</Text> */}
-          <Input
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Buscar trámite, programa o servicio"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
-        </View>
+      <View className="px-6 py-2 flex-col gap-2">
+
+        <Input
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Buscar trámite, programa o servicio"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {/* Catálogo de trámites */}
+        {/* <Text className="text-xs text-muted-foreground">Ordenados del más solicitado al menos solicitado.</Text> */}
       </View>
+
 
       <ScrollView
         className="flex-1"
@@ -294,8 +192,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Catálogo de trámites */}
-        <Text className="mb-4 text-xs text-muted-foreground">Ordenados del más solicitado al menos solicitado.</Text>
+
         {isLoading ? (
           <View className="items-center py-16">
             <ActivityIndicator color="#981646" />
@@ -312,68 +209,117 @@ export default function HomeScreen() {
               <Text className="text-lg font-bold">Trámites y servicios</Text>
               <View className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1">
                 <Text className="text-xs font-bold text-primary">
-                  {services.length} en total
+                  {services.length} en Total
                 </Text>
               </View>
             </View>
-            <View className="flex-row flex-wrap justify-between">
-              {visibleServices.map((service, index) => {
+            <View>
+              {visibleServices.map((service) => {
                 const open = serviceIsOpen(service);
                 const opensLater = Boolean(
                   service.opensAt &&
                   new Date(service.opensAt).getTime() > renderedAt,
                 );
                 return (
-                  <Pressable
-                    key={service.id}
-                    className="relative mb-4 min-h-40 w-full justify-between overflow-hidden rounded-2xl border border-border bg-primary p-3 active:opacity-70 sm:w-[48%]"
+
+                  // PARTE DE RENDERIZADO DE LAS CARDS
+                  // <Pressable
+                  //   key={service.id}
+                  //   className="mb-4 min-h-52 w-full justify-between rounded-2xl border bg-white p-4 active:opacity-70"
+                  //   disabled={!selectedEventId}
+                  //   onPress={() => handleNavigate({ id: service.id, title: service.name, subtitle: service.description, estado: open }, selectedEventId)}
+                  //   style={{
+                  //     borderColor: "rgba(152, 22, 70, 0.18)",
+                  //     borderWidth: 1,
+                  //     shadowColor: "#981646",
+                  //     shadowOffset: { width: 0, height: 3 },
+                  //     shadowOpacity: 0.1,
+                  //     shadowRadius: 7,
+                  //     elevation: 3,
+                  //   }}
+                  // >
+                  //   <View className="flex-row items-start justify-between gap-4">
+                  //     <View className="min-w-0 flex-1" style={{
+                  //       borderColor: "#981646",
+                  //       borderWidth: 1,
+                  //     }}>
+                  //       <View style={styles.serviceCardLogoContainer}>
+                  //         <Image
+                  //           source={DEFAULT_SERVICE_LOGO}
+                  //           resizeMode="contain"
+                  //           style={styles.serviceCardLogo}
+                  //           accessibilityLabel="Secretaría de Turismo y Desarrollo Económico"
+                  //         />
+                  //       </View>
+                  //       <Text className="mt-3 text-xs font-semibold tracking-wide text-primary/70">
+                  //         {service.type.charAt(0).toUpperCase() + service.type.slice(1)}
+                  //       </Text>
+                  //       <Text className="mt-1 text-base font-bold leading-5 text-primary">
+                  //         {service.name}
+                  //       </Text>
+                  //     </View>
+
+                  //     <View className="max-w-[38%] items-end">
+                  //       <View className={`rounded-full px-3 py-1.5 ${open ? "bg-emerald-50" : opensLater ? "bg-amber-50" : "bg-zinc-100"}`}>
+                  //         <Text className={`text-center text-[10px] font-bold ${open ? "text-emerald-700" : opensLater ? "text-amber-700" : "text-zinc-600"}`}>
+                  //           {open ? "Abierto" : opensLater ? "Próximo" : "Cerrado"}
+                  //         </Text>
+                  //       </View>
+                  //     </View>
+                  //   </View>
+
+                  //   <View className="mt-5 flex-row items-center justify-center rounded-xl bg-primary px-4 py-3">
+                  //     <Text className="mr-2 font-bold text-primary-foreground">Iniciar solicitud</Text>
+                  //     <ChevronRight color="#ffffff" size={19} strokeWidth={2.5} />
+                  //   </View>
+                  // </Pressable>
+                  <Pressable key={service.id}
+                    style={{
+                      marginBottom: 10,
+                      height: 190,
+                      width: "100%",
+                      borderRadius: 14,
+                      // borderWidth: 1,
+                      boxShadow: "0 3px 6px rgba(0, 0, 0, 0.3)",
+                      // borderColor: "#e4e4e7",
+                      backgroundColor: "#ffffff",
+                      padding: 12,
+                      flexDirection: "column",
+                      justifyContent: "space-between",
+                      gap: 8,
+                    }}
                     disabled={!selectedEventId}
                     onPress={() => handleNavigate({ id: service.id, title: service.name, subtitle: service.description, estado: open }, selectedEventId)}
                   >
-                    <ServiceCardImage
-                      key={service.imageUrl || "default"}
-                      imageUrl={service.imageUrl}
-                    />
-                    <View className="flex-row items-center justify-between">
-                      <View
-                        className="h-10 w-10 items-center justify-center rounded-full bg-white/90"
-                      >
-                        <Text className="font-bold" style={{ color: "#981646" }}>
-                          {String(index + 1).padStart(2, "0")}
-                        </Text>
+                    <View className="flex-row items-center justify-between gap-3">
+                      <View style={styles.serviceCardLogoContainer}>
+                        <Image
+                          source={DEFAULT_SERVICE_LOGO}
+                          style={styles.serviceCardLogo}
+                          resizeMode="contain"
+                        />
                       </View>
-                      <View
-                        className="max-w-[68%] items-center rounded-xl px-3 py-1.5"
-                        style={{
-                          backgroundColor: open ? "rgba(255,255,255,0.92)" : "rgba(254,243,199,0.95)",
-                        }}
-                      >
-                        <Text
-                          className="text-center text-xs font-bold"
-                          style={{ color: open ? "#981646" : "#92400e" }}
-                        >
-                          {open ? "Abierto" : opensLater ? "Abre el" : "Cerrado"}
+                      <View className={`shrink-0 rounded-full px-3 py-1.5 ${open ? "bg-emerald-50" : opensLater ? "bg-amber-50" : "bg-zinc-100"}`}>
+                        <Text className={`text-xs font-semibold ${open ? "text-emerald-700" : opensLater ? "text-amber-700" : "text-zinc-600"}`}>
+                          {open ? "Abierto" : opensLater ? "Próximo" : "Cerrado"}
                         </Text>
-                        {!open ? (
-                          <Text
-                            className="mt-0.5 text-center text-[10px] leading-3"
-                            style={{ color: "#92400e" }}
-                          >
-                            {opensLater
-                              ? new Date(service.opensAt!).toLocaleDateString("es-MX")
-                              : "Acepta prioridad"}
-                          </Text>
-                        ) : null}
                       </View>
                     </View>
 
-                    <View className="mt-5 flex-row items-end justify-between">
-                      <Text className="mr-2 flex-1 text-base font-semibold text-white">
+                    <View className="min-w-0 flex-1 justify-center">
+                      <Text numberOfLines={1} ellipsizeMode="tail" className="text-xs text-zinc-600">
+                        {service.type.charAt(0).toUpperCase() + service.type.slice(1)}
+                      </Text>
+                      <Text numberOfLines={2} ellipsizeMode="tail" className="mt-1 text-base font-semibold leading-5 text-zinc-950">
                         {service.name}
                       </Text>
-                      <ChevronRight color="#ffffff" size={19} strokeWidth={2.5} />
+                    </View>
+
+                    <View className="h-11 w-full items-center justify-center rounded-xl bg-primary">
+                      <Text className="text-base font-semibold text-white">Iniciar solicitud</Text>
                     </View>
                   </Pressable>
+                  // ******************
                 );
               })}
             </View>

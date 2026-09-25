@@ -59,11 +59,11 @@ export const FormHeader: React.FC<FormHeaderProps> = ({
         </Button>
         <Text className="text-lg font-bold" style={{ color: primaryColor }}>
           {directionName}
-        </Text>
+        </Text> 
       </View>
 
-      <View className="items-center">
-        <Text className="text-lg font-bold" style={{ color: foregroundColor }}>
+      <View >
+        <Text className="text-lg font-bold text-center" style={{ color: foregroundColor }}>
           {title}
         </Text>
         <Text
@@ -72,7 +72,7 @@ export const FormHeader: React.FC<FormHeaderProps> = ({
         >
           {description}
         </Text>
-        <Text className="text-md" style={{ color: mutedForegroundColor }}>
+        <Text className="text-md text-center" style={{ color: mutedForegroundColor }}>
           Paso {step + 1} de {totalSteps}
         </Text>
       </View>

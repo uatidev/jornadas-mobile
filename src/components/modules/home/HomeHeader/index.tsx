@@ -62,7 +62,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
         // borderWidth: 1
       }}
     >
-      <View className="flex-row justify-between items-center mb-2" style={{
+      <View className="flex-row justify-between items-center " style={{
         // backgroundColor: "transparent",
         // borderColor: "red",
         // borderWidth: 1
@@ -90,18 +90,15 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
             }}
             disabled={!events.length}
           >
-            <SelectTrigger className="h-auto w-full rounded-xl bg-card py-2">
+            <SelectTrigger
+              className="h-auto w-full rounded-xl border-transparent bg-transparent py-2 shadow-none"
+              iconClassName="size-7"
+            >
               {selectedEvent ? (
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-bold" numberOfLines={1}>
                     {selectedEvent.name}
                   </Text>
-                  {/* <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-                    {selectedEvent.locality}, {selectedEvent.municipality} · {selectedEvent.venue}
-                  </Text> */}
-                  {/* <Text className="text-xs text-muted-foreground" numberOfLines={1}>
-                    {formatSchedule(selectedEvent)}
-                  </Text> */}
                 </View>
               ) : (
                 <Text className="text-sm text-muted-foreground">

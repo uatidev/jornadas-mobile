@@ -1,12 +1,11 @@
 import { Button } from "@/src/components/ui/button";
 import { Text } from "@/src/components/ui/text";
-import Monicon from "@monicon/native";
-import React from "react";
-import { View } from "react-native";
 import {
   useCatalogService,
   useServiceRequirements,
 } from "@/src/hooks/useCatalog";
+import Monicon from "@monicon/native";
+import { View } from "react-native";
 import { DynamicGlobalForm } from "./DynamicGlobalForm";
 
 export type SpecificRequestData = Record<string, string>;
@@ -172,21 +171,21 @@ export function RequestIntro({
   const requirements = catalogRequirements.length
     ? catalogRequirements
     : detail.requirements.map((name, index) => ({
-        id: `fallback-${index}`,
-        serviceId,
-        name,
-        required: true,
-        order: index + 1,
-      }));
+      id: `fallback-${index}`,
+      serviceId,
+      name,
+      required: true,
+      order: index + 1,
+    }));
   const now = Date.now();
   const isOpen = Boolean(
     service?.active &&
-      (!service.opensAt || now >= new Date(service.opensAt).getTime()) &&
-      (!service.closesAt || now <= new Date(service.closesAt).getTime()),
+    (!service.opensAt || now >= new Date(service.opensAt).getTime()) &&
+    (!service.closesAt || now <= new Date(service.closesAt).getTime()),
   );
 
   return (
-    <View className="gap-5 rounded-2xl border border-border bg-card p-5">
+    <View className="gap-5 rounded-2xl bg-card p-5" style={{ boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)' }}>
       <View className="gap-2">
         <View className="self-start rounded-full bg-primary/10 px-3 py-1">
           <Text className="text-xs font-semibold text-primary">
@@ -207,7 +206,7 @@ export function RequestIntro({
         </Text>
       </View>
 
-      <View className="flex-row gap-3 rounded-xl bg-muted p-4">
+      <View className="flex-row gap-3 rounded-xl p-4">
         <Monicon name="mdi:cash-remove" size={24} />
         <View className="flex-1">
           <Text className="font-semibold">Costo</Text>
@@ -229,7 +228,8 @@ export function RequestIntro({
         {requirements.map((requirement) => (
           <View
             key={requirement.id}
-            className="flex-row items-start gap-3 rounded-xl bg-muted/60 p-3"
+            className="flex-row items-start gap-3 rounded-xl p-3"
+            style={{ boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)' }}
           >
             <Monicon name="mdi:check-circle-outline" size={19} />
             <Text className="flex-1 text-muted-foreground">

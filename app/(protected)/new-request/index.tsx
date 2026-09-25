@@ -13,8 +13,8 @@ import { Button } from "@/src/components/ui/button";
 import { Text } from "@/src/components/ui/text";
 import { useCatalogService, useGlobalForm } from "@/src/hooks/useCatalog";
 import { useAuth } from "@/src/providers/AuthProvider";
-import { identityApi } from "@/src/services/identityApi";
 import type { RequestReceipt } from "@/src/services/identityApi";
+import { identityApi } from "@/src/services/identityApi";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -80,8 +80,8 @@ export default function NewRequest() {
   const globalComplete = isDynamicFormComplete(globalFields, globalData);
   const specificComplete = specificFields.length
     ? specificFields
-        .filter((field) => field.required !== false)
-        .every((field) => Boolean(specificData[field.key]?.trim()))
+      .filter((field) => field.required !== false)
+      .every((field) => Boolean(specificData[field.key]?.trim()))
     : isSpecificFormComplete(serviceId, specificData);
   const copy = useMemo(
     () => ({
@@ -230,7 +230,7 @@ export default function NewRequest() {
           className="flex-1 px-6"
           contentContainerStyle={{ paddingBottom: insets.bottom + 104 }}
         >
-          <View className="mx-auto w-full max-w-[672px] gap-6">
+          <View className="mx-auto w-full max-w-[672px] gap-6 py-2">
             {stage === "success" ? (
               <RequestSuccess
                 title={title}
