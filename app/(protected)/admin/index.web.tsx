@@ -76,6 +76,140 @@ import {
 
 const DEFAULT_SERVICE_IMAGE = require("@/src/assets/images/logo-turismo.png");
 
+type RequestExportRow = {
+  tipo: string;
+  folio: string;
+  folioEvento: string;
+  evento: string;
+  sedeEvento: string;
+  detalle: string;
+  unidad: string;
+  capturo: string;
+  fecha: string;
+  estatus: string;
+  solicitante: string;
+  curp: string;
+  telefono: string;
+  correo: string;
+  municipio: string;
+  localidad: string;
+  datosSolicitante: string;
+  datosSolicitud: string;
+  observaciones: string;
+  prioridad: string;
+  resultado: string;
+  beneficio: string;
+  motivoNoContinuidad: string;
+  procedencia: string;
+  numeroOficio: string;
+  fechaOficio: string;
+  documentos: string;
+};
+
+const exportColumns: { key: keyof RequestExportRow; label: string }[] = [
+  { key: "tipo", label: "TIPO" },
+  { key: "folio", label: "FOLIO" },
+  { key: "folioEvento", label: "FOLIO EVENTO" },
+  { key: "evento", label: "EVENTO" },
+  { key: "sedeEvento", label: "SEDE DEL EVENTO" },
+  { key: "detalle", label: "TRÁMITE / ASUNTO" },
+  { key: "unidad", label: "UNIDAD" },
+  { key: "capturo", label: "CAPTURÓ" },
+  { key: "fecha", label: "FECHA" },
+  { key: "estatus", label: "ESTATUS" },
+  { key: "solicitante", label: "SOLICITANTE" },
+  { key: "curp", label: "CURP" },
+  { key: "telefono", label: "TELÉFONO" },
+  { key: "correo", label: "CORREO" },
+  { key: "municipio", label: "MUNICIPIO" },
+  { key: "localidad", label: "LOCALIDAD" },
+  { key: "datosSolicitante", label: "DATOS DEL SOLICITANTE" },
+  { key: "datosSolicitud", label: "DATOS DE LA SOLICITUD" },
+  { key: "observaciones", label: "OBSERVACIONES" },
+  { key: "prioridad", label: "PRIORIDAD" },
+  { key: "resultado", label: "RESULTADO" },
+  { key: "beneficio", label: "APOYO / BENEFICIO" },
+  { key: "motivoNoContinuidad", label: "MOTIVO DE NO CONTINUIDAD" },
+  { key: "procedencia", label: "PROCEDENCIA" },
+  { key: "numeroOficio", label: "NÚMERO DE OFICIO" },
+  { key: "fechaOficio", label: "FECHA DEL OFICIO" },
+  { key: "documentos", label: "DOCUMENTOS ADJUNTOS" },
+];
+
+const EMPTY_EXPORT_VALUE = "—";
+
+function printableValue(value: unknown): string {
+  if (value === undefined || value === null || value === "") return EMPTY_EXPORT_VALUE;
+  if (typeof value === "boolean") return value ? "Sí" : "No";
+  if (Array.isArray(value)) return value.map(printableValue).join(", ");
+  if (typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    if (typeof record.name === "string") return record.name;
+    if (typeof record.nombre === "string") return record.nombre;
+    return Object.entries(record).map(([key, nested]) => `${key}: ${printableValue(nested)}`).join("; ");
+  }
+  return String(value);
+}
+
+function normalizeExportKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+}
+
+function findDataValue(data: Record<string, unknown> | undefined, aliases: string[]) {
+  if (!data) return EMPTY_EXPORT_VALUE;
+  const normalizedAliases = aliases.map(normalizeExportKey);
+  const match = Object.entries(data).find(([key]) => normalizedAliases.some((alias) => normalizeExportKey(key).includes(alias)));
+  return printableValue(match?.[1]);
+}
+
+function applicantName(data: Record<string, unknown> | undefined) {
+  const fullName = findDataValue(data, ["nombrecompleto", "nombre_solicitante"]);
+  if (fullName !== EMPTY_EXPORT_VALUE) return fullName;
+  const parts = [
+    findDataValue(data, ["nombre", "nombres"]),
+    findDataValue(data, ["apellidopaterno", "primerapellido"]),
+    findDataValue(data, ["apellidomaterno", "segundoapellido"]),
+  ].filter((value) => value !== EMPTY_EXPORT_VALUE);
+  return parts.join(" ") || EMPTY_EXPORT_VALUE;
+}
+
+function formatExportData(data: Record<string, unknown> | undefined, labels: Record<string, string> = {}) {
+  if (!data || !Object.keys(data).length) return EMPTY_EXPORT_VALUE;
+  return Object.entries(data)
+    .filter(([, value]) => value !== undefined && value !== null && value !== "")
+    .map(([key, value]) => `${labels[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}: ${printableValue(value)}`)
+    .join(" | ") || EMPTY_EXPORT_VALUE;
+}
+
+function escapeHtml(value: unknown) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function downloadRequestsExcel(rows: RequestExportRow[]) {
+  const table = `<table><thead><tr>${exportColumns.map((column) => `<th>${column.label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${exportColumns.map((column) => `<td>${escapeHtml(row[column.key])}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  const workbook = `<!doctype html><html><head><meta charset="utf-8"><style>table{border-collapse:collapse}th,td{border:1px solid #bbb;padding:6px}th{background:#981646;color:white}</style></head><body><h1>Reporte de solicitudes</h1>${table}</body></html>`;
+  const url = URL.createObjectURL(new Blob(["\ufeff", workbook], { type: "application/vnd.ms-excel;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `solicitudes-${new Date().toISOString().slice(0, 10)}.xls`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function printRequestsPdf(rows: RequestExportRow[]) {
+  const popup = window.open("", "_blank");
+  if (!popup) throw new Error("El navegador bloqueó la ventana del reporte. Habilita las ventanas emergentes e intenta de nuevo.");
+  popup.opener = null;
+  const table = `<table><thead><tr>${exportColumns.map((column) => `<th>${column.label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr>${exportColumns.map((column) => `<td>${escapeHtml(row[column.key])}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
+  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Reporte de solicitudes</title><style>@page{size:landscape;margin:12mm}body{font-family:Arial,sans-serif;color:#222}h1{color:#981646;margin:0 0 4px}.meta{margin:0 0 18px;color:#666}table{width:100%;border-collapse:collapse;font-size:9px}th,td{border:1px solid #bbb;padding:5px;text-align:left;vertical-align:top}th{background:#981646;color:white;-webkit-print-color-adjust:exact;print-color-adjust:exact}tr{break-inside:avoid}</style></head><body><h1>Reporte de solicitudes</h1><p class="meta">Generado el ${escapeHtml(new Date().toLocaleString("es-MX"))} · ${rows.length} registros</p>${table}<script>window.onload=()=>{window.print();window.onafterprint=()=>window.close()}<\/script></body></html>`);
+  popup.document.close();
+}
+
 type Section =
   | "resumen"
   | "reportes"
@@ -1790,6 +1924,89 @@ function SuperAdminDashboard() {
     () => Object.fromEntries((profiles.data || []).map((profile) => [profile.id, profile.name])),
     [profiles.data],
   );
+  const eventNames = useMemo(
+    () => Object.fromEntries((events.data || []).map((event) => [event.id, event.name])),
+    [events.data],
+  );
+  const eventsById = useMemo(
+    () => Object.fromEntries((events.data || []).map((event) => [event.id, event])),
+    [events.data],
+  );
+  const applicantFieldLabels = useMemo(
+    () => Object.fromEntries((globalForm.data?.fields || []).map((field) => [field.key, field.label])),
+    [globalForm.data],
+  );
+  const requestFieldLabels = useMemo(
+    () => Object.fromEntries((services.data || []).map((service) => [
+      service.id,
+      Object.fromEntries((service.formConfig?.fields || []).map((field) => [field.key, field.label])),
+    ])),
+    [services.data],
+  );
+  const requestExportRows = useMemo<RequestExportRow[]>(() => [
+    ...(requests.data || []).map((request) => {
+      const event = eventsById[request.eventId || ""];
+      return ({
+      tipo: "Solicitud normal",
+      folio: request.folio || request.programFolio || "—",
+      folioEvento: request.eventFolio || "—",
+      evento: eventNames[request.eventId || ""] || "Sin evento",
+      sedeEvento: event ? [event.venue, event.address, event.locality, event.municipality].filter(Boolean).join(" · ") : "—",
+      detalle: serviceNames[request.serviceId] || "Trámite no disponible",
+      unidad: unitNames[request.unitId] || request.unitId || "—",
+      capturo: staffNames[request.applicantUserId || ""] || "—",
+      fecha: request.requestedAt ? new Date(request.requestedAt).toLocaleString("es-MX") : "—",
+      estatus: REQUEST_STATUS_LABELS[request.status] || request.status?.replaceAll("_", " ") || "—",
+      solicitante: applicantName(request.applicantData),
+      curp: findDataValue(request.applicantData, ["curp"]),
+      telefono: findDataValue(request.applicantData, ["telefono", "celular", "movil"]),
+      correo: findDataValue(request.applicantData, ["correo", "email"]),
+      municipio: findDataValue(request.applicantData, ["municipio"]),
+      localidad: findDataValue(request.applicantData, ["localidad", "comunidad"]),
+      datosSolicitante: formatExportData(request.applicantData, applicantFieldLabels),
+      datosSolicitud: formatExportData(request.requestData, requestFieldLabels[request.serviceId]),
+      observaciones: request.notes || "—",
+      prioridad: request.priorityOnReopening ? "Prioridad institucional" : "Regular",
+      resultado: request.finalResult || "—",
+      beneficio: request.receivedBenefit === true ? `Sí${request.benefitDetail ? `: ${request.benefitDetail}` : ""}` : request.receivedBenefit === false ? "No" : "—",
+      motivoNoContinuidad: request.discontinuationReason || "—",
+      procedencia: "—",
+      numeroOficio: "—",
+      fechaOficio: "—",
+      documentos: "—",
+    });}),
+    ...(secretaryRequests.data?.requests || []).map((request) => {
+      const event = eventsById[request.eventId || ""];
+      return ({
+      tipo: "Solicitud de Secretaría",
+      folio: request.folio || "—",
+      folioEvento: request.eventFolio || "—",
+      evento: eventNames[request.eventId || ""] || "Sin evento",
+      sedeEvento: event ? [event.venue, event.address, event.locality, event.municipality].filter(Boolean).join(" · ") : "—",
+      detalle: request.subject || "—",
+      unidad: unitNames[request.responsibleUnitId || ""] || "Secretaría",
+      capturo: request.capturedByName || "—",
+      fecha: request.createdAt ? new Date(request.createdAt).toLocaleString("es-MX") : "—",
+      estatus: REQUEST_STATUS_LABELS[request.status] || request.status?.replaceAll("_", " ") || "—",
+      solicitante: applicantName(request.applicantData),
+      curp: findDataValue(request.applicantData, ["curp"]),
+      telefono: findDataValue(request.applicantData, ["telefono", "celular", "movil"]),
+      correo: findDataValue(request.applicantData, ["correo", "email"]),
+      municipio: findDataValue(request.applicantData, ["municipio"]),
+      localidad: findDataValue(request.applicantData, ["localidad", "comunidad"]),
+      datosSolicitante: formatExportData(request.applicantData, applicantFieldLabels),
+      datosSolicitud: request.subject || "—",
+      observaciones: request.notes || "—",
+      prioridad: request.highPriority ? "Alta" : "Regular",
+      resultado: request.route === "canalizada" ? "Canalizada" : request.route === "secretaria" ? "Atención de Secretaría" : "Pendiente de canalización",
+      beneficio: "—",
+      motivoNoContinuidad: request.status === "cancelada" ? request.notes || "—" : "—",
+      procedencia: request.source.replaceAll("_", " "),
+      numeroOficio: request.officeNumber || "—",
+      fechaOficio: request.officeDate ? new Date(request.officeDate).toLocaleDateString("es-MX") : "—",
+      documentos: request.documents.length ? request.documents.map((document) => document.name).join(", ") : "Sin documentos",
+    });}),
+  ], [applicantFieldLabels, eventNames, eventsById, requestFieldLabels, requests.data, secretaryRequests.data, serviceNames, staffNames, unitNames]);
   const exhibitionEvents = useMemo(() => {
     const term = exhibitionSearch.trim().toLocaleLowerCase("es-MX");
     return (events.data || []).filter((event) => !term
@@ -2808,6 +3025,22 @@ function SuperAdminDashboard() {
               )}
               {section === "solicitudes" && (
                 <View className="gap-6">
+                  <View className="flex-row flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card p-5">
+                    <View>
+                      <Text className="text-xl font-bold">Exportar solicitudes</Text>
+                      <Text className="mt-1 text-sm text-muted-foreground">Incluye solicitudes normales y de Secretaría.</Text>
+                    </View>
+                    <View className="flex-row flex-wrap gap-2">
+                      <Button variant="outline" disabled={!requestExportRows.length} onPress={() => {
+                        try { printRequestsPdf(requestExportRows); } catch (error) { setNotice(error instanceof Error ? error.message : "No fue posible generar el PDF."); }
+                      }}>
+                        <Text>Exportar PDF</Text>
+                      </Button>
+                      <Button disabled={!requestExportRows.length} onPress={() => downloadRequestsExcel(requestExportRows)}>
+                        <Text>Exportar Excel</Text>
+                      </Button>
+                    </View>
+                  </View>
                   <View>
                     <Text className="text-xl font-bold">Solicitudes normales</Text>
                     <Text className="mb-4 mt-1 text-sm text-muted-foreground">
