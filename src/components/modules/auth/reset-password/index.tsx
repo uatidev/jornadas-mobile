@@ -13,13 +13,13 @@ import { Text } from "@/src/components/ui/text";
 import { useResetPasswordForm } from "@/src/forms/useResetPasswordForm";
 import { Monicon } from "@monicon/native";
 import { AlertCircleIcon } from "lucide-react-native";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import { Controller } from "react-hook-form";
 import {
   Image,
   Pressable,
   StyleSheet,
   View,
-  useColorScheme,
 } from "react-native";
 
 interface ResetPasswordFormProps {
@@ -42,11 +42,11 @@ export function ResetPasswordForm({ userId, secret }: ResetPasswordFormProps) {
     onPasswordSubmitEditing,
     isLoading,
   } = useResetPasswordForm({ userId, secret });
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useTheme();
   const logoSource =
     colorScheme === "dark"
-      ? require("@/src/assets/images/JORNADAS_V_LETRASB.png")
-      : require("@/src/assets/images/logo-vertical-color.png");
+      ? require("@/src/assets/images/logo-ac-color-vert-blanco.png")
+      : require("@/src/assets/images/logo-ac-color-vert.png");
 
   return (
     <View className="gap-6 bg-primary w-full max-w-md">

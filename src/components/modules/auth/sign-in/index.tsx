@@ -3,23 +3,23 @@ import { Button } from "@/src/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
-  CardTitle,
+  CardTitle
 } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Label } from "@/src/components/ui/label";
 import { Text } from "@/src/components/ui/text";
 import { useSignInForm } from "@/src/forms/useSignInForm";
 import { Monicon } from "@monicon/native";
+import { BlurView } from "expo-blur";
 import { AlertCircleIcon } from "lucide-react-native";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import { Controller } from "react-hook-form";
 import {
   Image,
   Pressable,
   StyleSheet,
   View,
-  useColorScheme,
 } from "react-native";
 
 export function SignInForm() {
@@ -34,15 +34,28 @@ export function SignInForm() {
     onEmailSubmitEditing,
     isLoading,
   } = useSignInForm();
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useTheme();
   const logoSource =
     colorScheme === "dark"
-      ? require("@/src/assets/images/JORNADAS_V_LETRASB.png")
-      : require("@/src/assets/images/logo-vertical-color.png");
+      ? require("@/src/assets/images/logo-ac-color-vert-blanco.png")
+      : require("@/src/assets/images/logo-ac-color-vert.png");
 
   return (
-    <View className="gap-6 bg-primary w-full max-w-md">
-      <Card className="backdrop-blur-3xl border-border/0 sm:border-border shadow-none sm:shadow-sm sm:shadow-black/5 w-full">
+    <View className="gap-6 w-full max-w-md">
+      <Card
+        className="overflow-hidden border-0 shadow-lg shadow-black/10 w-full"
+        style={{
+          backgroundColor:
+            colorScheme === "dark"
+              ? "rgba(23, 23, 23, 0.6)"
+              : "rgba(255, 255, 255, 0.6)",
+        }}
+      >
+        <BlurView
+          intensity={60}
+          tint={colorScheme === "dark" ? "dark" : "light"}
+          style={StyleSheet.absoluteFill}
+        />
         <CardHeader>
           <Image
             source={logoSource}
@@ -56,9 +69,9 @@ export function SignInForm() {
           <CardTitle className="text-center text-xl sm:text-left">
             Inicia sesión en tu cuenta
           </CardTitle>
-          <CardDescription className="text-center sm:text-left">
-            Bienvenido de nuevo! Por favor inicia sesión para continuar
-          </CardDescription>
+          {/* <CardDescription className="text-center sm:text-left">
+            Por favor inicia sesión para continuar
+          </CardDescription> */}
         </CardHeader>
         <CardContent className="gap-6">
           {error && (

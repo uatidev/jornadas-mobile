@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-const DEFAULT_SERVICE_LOGO = require("@/src/assets/images/logo-turismo.png");
+const DEFAULT_SERVICE_LOGO = require("@/src/assets/images/logo-ac-color-ho.png");
 
 const styles = StyleSheet.create({
   serviceCardLogoContainer: {
@@ -22,7 +22,6 @@ const styles = StyleSheet.create({
   serviceCardLogo: {
     width: "100%",
     height: "100%",
-    transform: [{ scale: 2.4 }]
   },
 });
 

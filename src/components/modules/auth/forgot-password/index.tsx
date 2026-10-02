@@ -14,11 +14,11 @@ import { useForgotPasswordForm } from "@/src/forms/useForgotPasswordForm";
 import { Monicon } from "@monicon/native";
 import { AlertCircleIcon, CheckCircleIcon } from "lucide-react-native";
 import { Link } from "expo-router";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import { Controller } from "react-hook-form";
 import {
   Image,
   View,
-  useColorScheme,
 } from "react-native";
 
 export function ForgotPasswordForm() {
@@ -30,11 +30,11 @@ export function ForgotPasswordForm() {
     success,
     isLoading,
   } = useForgotPasswordForm();
-  const colorScheme = useColorScheme();
+  const { colorScheme } = useTheme();
   const logoSource =
     colorScheme === "dark"
-      ? require("@/src/assets/images/JORNADAS_V_LETRASB.png")
-      : require("@/src/assets/images/logo-vertical-color.png");
+      ? require("@/src/assets/images/logo-ac-color-vert-blanco.png")
+      : require("@/src/assets/images/logo-ac-color-vert.png");
 
   if (success) {
     return (

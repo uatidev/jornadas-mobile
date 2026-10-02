@@ -23,9 +23,9 @@
     "android": {
       "icon": "./src/assets/images/icon.png",
       "adaptiveIcon": {
-        "foregroundImage": "./src/assets/images/icon.png",
-        "backgroundColor": "#9A1445",
-        "monochromeImage": "./src/assets/images/icon.png"
+        "foregroundImage": "./src/assets/images/adaptive-icon.png",
+        "backgroundColor": "#ffffff",
+        "monochromeImage": "./src/assets/images/adaptive-icon.png"
       },
       "package": "com.turismo.jornadasdeatencion",
       "permissions": [
@@ -76,8 +76,8 @@
       [
         "expo-splash-screen",
         {
-          "image": "./src/assets/images/JORNADAS_Vblanco.png",
-          "imageWidth": 288,
+          "image": "./src/assets/images/logo-ac-blanco-vert.png",
+          "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#9A1445"
         }

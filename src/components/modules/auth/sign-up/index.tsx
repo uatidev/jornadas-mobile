@@ -24,7 +24,6 @@ import {
   Pressable,
   StyleSheet,
   View,
-  useColorScheme,
 } from "react-native";
 
 export function SignUpForm() {
@@ -46,11 +45,10 @@ export function SignUpForm() {
   } = useSignUpForm();
   const { colorScheme } = useTheme();
   const primaryColor = THEME[colorScheme].primary;
-  const colorSchemeSystem = useColorScheme();
   const logoSource =
-    colorSchemeSystem === "dark"
-      ? require("@/src/assets/images/JORNADAS_V_LETRASB.png")
-      : require("@/src/assets/images/logo-vertical-color.png");
+    colorScheme === "dark"
+      ? require("@/src/assets/images/logo-ac-color-vert-blanco.png")
+      : require("@/src/assets/images/logo-ac-color-vert.png");
 
   return (
     <View className="gap-6 bg-primary w-full max-w-md">

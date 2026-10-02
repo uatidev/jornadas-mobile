@@ -47,7 +47,7 @@ const Splash = () => {
         }}
       >
         <Image
-          source={require("@/src/assets/images/JORNADAS_Vblanco.png")}
+          source={require("@/src/assets/images/logo-ac-blanco-vert.png")}
           style={{
             width: "100%",
             height: 176,
