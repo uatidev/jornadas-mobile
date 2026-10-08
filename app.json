@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Jornadas de Atención - Secretaría de Turismo y Desarrollo Económico",
+    "name": "Atención Ciudadana - Secretaría de Turismo y Desarrollo Económico",
     "slug": "atencion-ciudadana",
     "version": "1.0.1",
     "orientation": "portrait",
@@ -56,7 +56,7 @@
       "bundler": "metro",
       "output": "single",
       "favicon": "./src/assets/images/favicon.png",
-      "title": "Jornadas de Atención - Secretaría de Turismo y Desarrollo Económico",
+      "title": "Atención Ciudadana - Secretaría de Turismo y Desarrollo Económico",
       "description": "Sistema oficial de levantamiento de información del Secretaría de Turismo y Desarrollo Económico. Formularios para promociones, desarrollo turístico, ferias, comercio y economía social.",
       "keywords": [
         "turismo",

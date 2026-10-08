@@ -3,8 +3,10 @@ import { Input } from "@/src/components/ui/input";
 import { useActiveEvents, useServicesCatalog } from "@/src/hooks/useCatalog";
 import { useNewRequest } from "@/src/hooks/useHome";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import { identityApi } from "@/src/services/identityApi";
-import type { AttentionEvent } from "@/src/types/catalog";
+import type { AttentionEvent, ServiceType } from "@/src/types/catalog";
+import { Monicon } from "@monicon/native";
 import { useQuery } from "@tanstack/react-query";
 import * as Location from "expo-location";
 import { useRouter } from "expo-router";
@@ -13,6 +15,7 @@ import { ActivityIndicator, Image, Platform, Pressable, RefreshControl, ScrollVi
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const DEFAULT_SERVICE_LOGO = require("@/src/assets/images/logo-ac-color-ho.png");
+const DEFAULT_SERVICE_LOGO_DARK = require("@/src/assets/images/logo-ac-color-ho-blanco.png");
 
 const styles = StyleSheet.create({
   serviceCardLogoContainer: {
@@ -24,6 +27,13 @@ const styles = StyleSheet.create({
     height: "100%",
   },
 });
+
+const TYPE_FILTERS: { value: ServiceType | "todos"; label: string }[] = [
+  { value: "todos", label: "Todos" },
+  { value: "tramite", label: "Trámites" },
+  { value: "servicio", label: "Servicios" },
+  { value: "programa", label: "Programas" },
+];
 
 const distanceInKm = (
   latitude: number,
@@ -48,12 +58,14 @@ const distanceInKm = (
 export default function HomeScreen() {
   const { handleLogout, handleNavigate } = useNewRequest();
   const { user } = useAuth();
+  const { colorScheme } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { data: services = [], isLoading, error, refetch } = useServicesCatalog();
   const { data: events = [], refetch: refetchEvents } = useActiveEvents();
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<ServiceType | "todos">("todos");
   const [selectedEventId, setSelectedEventId] = useState("");
   const [renderedAt] = useState(() => Date.now());
   const autoSelectionStarted = useRef(false);
@@ -138,6 +150,7 @@ export default function HomeScreen() {
   };
   const normalizedSearch = search.trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
   const visibleServices = [...services]
+    .filter((service) => typeFilter === "todos" || service.type === typeFilter)
     .filter((service) => !normalizedSearch || `${service.name} ${service.description}`.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().includes(normalizedSearch))
     .sort((first, second) => (popularity.data?.counts[second.id] || 0) - (popularity.data?.counts[first.id] || 0));
 
@@ -159,6 +172,23 @@ export default function HomeScreen() {
           autoCapitalize="none"
           autoCorrect={false}
         />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+          {TYPE_FILTERS.map((filter) => {
+            const selected = typeFilter === filter.value;
+            return (
+              <Pressable
+                key={filter.value}
+                onPress={() => setTypeFilter(filter.value)}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                style={{ paddingInline: 5 }}
+                className={`h-8 justify-center rounded-full border ${selected ? "border-primary bg-primary" : "border-border bg-card"}`}
+              >
+                <Text className={`text-xs font-semibold ${selected ? "text-white" : "text-muted-foreground"}`}>{filter.label}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
         {/* Catálogo de trámites */}
         {/* <Text className="text-xs text-muted-foreground">Ordenados del más solicitado al menos solicitado.</Text> */}
       </View>
@@ -185,9 +215,9 @@ export default function HomeScreen() {
         )}
 
         {!events.length && (
-          <View className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-5">
-            <Text className="font-bold text-amber-900">No hay un evento activo</Text>
-            <Text className="mt-1 text-sm text-amber-800">Es necesario crear o activar un evento para registrar solicitudes.</Text>
+          <View className="mb-5 rounded-2xl border border-amber-300 bg-amber-50 p-5 dark:border-amber-800 dark:bg-amber-950">
+            <Text className="font-bold text-amber-900 dark:text-amber-200">No hay un evento activo</Text>
+            <Text className="mt-1 text-sm text-amber-800 dark:text-amber-300">Es necesario crear o activar un evento para registrar solicitudes.</Text>
           </View>
         )}
 
@@ -208,7 +238,7 @@ export default function HomeScreen() {
               <Text className="text-lg font-bold">Trámites y servicios</Text>
               <View className="rounded-full border border-primary/20 bg-primary/10 px-3 py-1">
                 <Text className="text-xs font-bold text-primary">
-                  {services.length} en Total
+                  {normalizedSearch || typeFilter !== "todos" ? `${visibleServices.length} de ${services.length}` : `${services.length} en Total`}
                 </Text>
               </View>
             </View>
@@ -260,7 +290,7 @@ export default function HomeScreen() {
 
                   //     <View className="max-w-[38%] items-end">
                   //       <View className={`rounded-full px-3 py-1.5 ${open ? "bg-emerald-50" : opensLater ? "bg-amber-50" : "bg-zinc-100"}`}>
-                  //         <Text className={`text-center text-[10px] font-bold ${open ? "text-emerald-700" : opensLater ? "text-amber-700" : "text-zinc-600"}`}>
+                  //         <Text className={`text-center text-[10px] font-bold ${open ? "text-emerald-700 dark:text-emerald-300" : opensLater ? "text-amber-700 dark:text-amber-300" : "text-muted-foreground"}`}>
                   //           {open ? "Abierto" : opensLater ? "Próximo" : "Cerrado"}
                   //         </Text>
                   //       </View>
@@ -273,15 +303,15 @@ export default function HomeScreen() {
                   //   </View>
                   // </Pressable>
                   <Pressable key={service.id}
+                    className="bg-card dark:border dark:border-border"
                     style={{
                       marginBottom: 10,
-                      height: 190,
+                      minHeight: 130,
                       width: "100%",
                       borderRadius: 14,
                       // borderWidth: 1,
-                      boxShadow: "0 3px 6px rgba(0, 0, 0, 0.3)",
+                      boxShadow: "0 3px 12px rgba(0, 0, 0, 0.1)",
                       // borderColor: "#e4e4e7",
-                      backgroundColor: "#ffffff",
                       padding: 12,
                       flexDirection: "column",
                       justifyContent: "space-between",
@@ -293,29 +323,34 @@ export default function HomeScreen() {
                     <View className="flex-row items-center justify-between gap-3">
                       <View style={styles.serviceCardLogoContainer}>
                         <Image
-                          source={DEFAULT_SERVICE_LOGO}
+                          source={colorScheme === "dark" ? DEFAULT_SERVICE_LOGO_DARK : DEFAULT_SERVICE_LOGO}
                           style={styles.serviceCardLogo}
                           resizeMode="contain"
                         />
                       </View>
-                      <View className={`shrink-0 rounded-full px-3 py-1.5 ${open ? "bg-emerald-50" : opensLater ? "bg-amber-50" : "bg-zinc-100"}`}>
+                      <View className={`shrink-0 rounded-full px-3 py-1.5 ${open ? "bg-emerald-100 dark:bg-emerald-950" : opensLater ? "bg-amber-100 dark:bg-amber-950" : "bg-muted"}`}>
                         <Text className={`text-xs font-semibold ${open ? "text-emerald-700" : opensLater ? "text-amber-700" : "text-zinc-600"}`}>
                           {open ? "Abierto" : opensLater ? "Próximo" : "Cerrado"}
                         </Text>
                       </View>
                     </View>
 
-                    <View className="min-w-0 flex-1 justify-center">
-                      <Text numberOfLines={1} ellipsizeMode="tail" className="text-xs text-zinc-600">
-                        {service.type.charAt(0).toUpperCase() + service.type.slice(1)}
-                      </Text>
-                      <Text numberOfLines={2} ellipsizeMode="tail" className="mt-1 text-base font-semibold leading-5 text-zinc-950">
-                        {service.name}
-                      </Text>
-                    </View>
+                    <View className="flex-row items-center gap-3">
+                      <View className="min-w-0 flex-1 justify-center">
+                        <Text numberOfLines={1} ellipsizeMode="tail" className="text-xs text-muted-foreground">
+                          {service.type.charAt(0).toUpperCase() + service.type.slice(1)}
+                        </Text>
+                        <Text numberOfLines={2} ellipsizeMode="tail" className="mt-1 text-base font-semibold leading-5 text-foreground">
+                          {service.name}
+                        </Text>
+                      </View>
 
-                    <View className="h-11 w-full items-center justify-center rounded-xl bg-primary">
-                      <Text className="text-base font-semibold text-white">Iniciar solicitud</Text>
+                      <View
+                        accessibilityLabel="Iniciar solicitud"
+                        className="h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary"
+                      >
+                        <Monicon name="ci:chevron-right" size={20} color="#ffffff" />
+                      </View>
                     </View>
                   </Pressable>
                   // ******************
@@ -325,7 +360,7 @@ export default function HomeScreen() {
             {!visibleServices.length ? (
               <View className="rounded-2xl border border-border bg-card p-8">
                 <Text className="text-center font-semibold">No encontramos trámites con ese nombre.</Text>
-                <Pressable onPress={() => setSearch("")}><Text className="mt-2 text-center text-primary">Limpiar búsqueda</Text></Pressable>
+                <Pressable onPress={() => { setSearch(""); setTypeFilter("todos"); }}><Text className="mt-2 text-center text-primary">Limpiar filtros</Text></Pressable>
               </View>
             ) : null}
           </View>

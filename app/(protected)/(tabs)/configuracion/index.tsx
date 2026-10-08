@@ -13,9 +13,13 @@ import { useGestionarCuenta } from "@/src/hooks/useGestionarCuenta";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import Monicon from "@monicon/native";
+import Constants from "expo-constants";
 import { useState } from "react";
 import { ActivityIndicator, ScrollView, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+const APP_VERSION =
+  process.env.EXPO_PUBLIC_APP_VERSION || Constants.expoConfig?.version || "—";
 
 export default function ConfiguracionScreen() {
   const insets = useSafeAreaInsets();
@@ -105,7 +109,7 @@ export default function ConfiguracionScreen() {
           ))}
 
           <View className="rounded-2xl border border-border bg-card p-4">
-            <Text className="text-sm font-bold text-muted-foreground">SESIÓN</Text>
+            <Text className="text-sm font-bold text-muted-foreground">Sesión</Text>
             <Text className="mb-4 mt-1 text-xs text-muted-foreground">
               Cierra tu sesión en este dispositivo.
             </Text>
@@ -118,6 +122,7 @@ export default function ConfiguracionScreen() {
               <Text>{isLoggingOut ? "Cerrando sesión..." : "Cerrar sesión"}</Text>
             </Button>
           </View>
+          <Text className="text-sm text-center text-muted-foreground">{`Versión ${APP_VERSION}`}</Text>
         </View>
       </ScrollView>
 

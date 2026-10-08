@@ -185,7 +185,7 @@ export function RequestIntro({
   );
 
   return (
-    <View className="gap-5 rounded-2xl bg-card p-5" style={{ boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)' }}>
+    <View className="gap-5 rounded-2xl bg-card p-5">
       <View className="gap-2">
         <View className="self-start rounded-full bg-primary/10 px-3 py-1">
           <Text className="text-xs font-semibold text-primary">
