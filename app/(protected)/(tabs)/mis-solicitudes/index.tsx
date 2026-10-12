@@ -1,359 +1,278 @@
+import { CollapsingHeaderScrollView } from "@/src/components/common/CollapsingHeader";
+import { GlassInput } from "@/src/components/common/GlassInput";
+import { GlassSelect } from "@/src/components/common/GlassSelect";
+import { useGlassTabBarSpace } from "@/src/components/common/GlassTabBar";
+import { RequestListItem, RequestListItemSkeleton } from "@/src/components/modules/mis-solicitudes";
 import { Button } from "@/src/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/src/components/ui/select";
 import { Text } from "@/src/components/ui/text";
-import { useActiveEvents, useGlobalForm, useServicesCatalog } from "@/src/hooks/useCatalog";
-import { useAuth } from "@/src/providers/AuthProvider";
-import { identityApi } from "@/src/services/identityApi";
-import { requestsService } from "@/src/services/requests";
-import { useQuery } from "@tanstack/react-query";
+import { useActiveEvents } from "@/src/hooks/useCatalog";
+import { useMyRequests, type MyRequestItem, type MyRequestKind } from "@/src/hooks/useMyRequests";
+import { setSelectedEventId, useSelectedEventId } from "@/src/hooks/useSelectedEvent";
+import { useRouter } from "expo-router";
 import { useMemo, useState } from "react";
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pressable, RefreshControl, ScrollView, View } from "react-native";
 
-const detailValue = (value: unknown) => {
-  if (typeof value !== "string") return String(value ?? "—");
-  try {
-    const parsed = JSON.parse(value);
-    return parsed?.name ? `Archivo: ${parsed.name}` : value;
-  } catch {
-    return value || "—";
-  }
+const KIND_FILTERS: { value: MyRequestKind | "all"; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "regular", label: "Trámites" },
+  { value: "secretary", label: "Secretaría" },
+];
+
+const normalize = (text: string) =>
+  text.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
+const dayKey = (date: Date) => `${date.getFullYear()}-${date.getMonth()}-${date.getDate()}`;
+
+/** "Hoy", "Ayer" o la fecha (p. ej. "lunes, 6 de octubre"). */
+const dayLabel = (iso: string) => {
+  const date = new Date(iso);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  if (dayKey(date) === dayKey(today)) return "Hoy";
+  if (dayKey(date) === dayKey(yesterday)) return "Ayer";
+  return date.toLocaleDateString("es-MX", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    ...(date.getFullYear() !== today.getFullYear() ? { year: "numeric" } : {}),
+  });
 };
 
-function DetailRows({ data, labels = {} }: { data?: Record<string, unknown>; labels?: Record<string, string> }) {
-  const entries = Object.entries(data || {}).filter(([, value]) => value !== "" && value != null);
-  if (!entries.length) return <Text className="text-sm text-muted-foreground">Sin información adicional.</Text>;
+function FilterChip({ label, count, selected, onPress }: { label: string; count?: number; selected: boolean; onPress: () => void }) {
   return (
-    <View className="gap-3">
-      {entries.map(([key, value]) => (
-        <View key={key} className="border-b border-border/50 pb-2">
-          <Text className="text-[11px] font-bold uppercase text-muted-foreground">
-            {labels[key] || key.replace(/^pregunta_?/, "Pregunta ").replaceAll("_", " ")}
-          </Text>
-          <Text className="mt-1 text-sm">{detailValue(value)}</Text>
+    <Pressable
+      onPress={onPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected }}
+      style={{ paddingInline: 10 }}
+      className={`h-8 flex-row items-center gap-1.5 rounded-full border ${selected ? "border-primary bg-primary" : "border-border bg-card"}`}
+    >
+      <Text className={`text-xs font-semibold ${selected ? "text-white" : "text-muted-foreground"}`}>{label}</Text>
+      {count !== undefined ? (
+        <View className={`min-w-5 items-center rounded-full px-1.5 ${selected ? "bg-white/25" : "bg-muted"}`}>
+          <Text className={`text-[11px] font-bold ${selected ? "text-white" : "text-muted-foreground"}`}>{count}</Text>
         </View>
-      ))}
-    </View>
+      ) : null}
+    </Pressable>
   );
 }
 
 export default function MisSolicitudesScreen() {
-  const { user } = useAuth();
-  const insets = useSafeAreaInsets();
-  const [selectedEventId, setSelectedEventId] = useState("");
-  const [requestType, setRequestType] = useState<"all" | "regular" | "secretary">("all");
-  const [expandedRequest, setExpandedRequest] = useState<string | null>(null);
+  const router = useRouter();
+  const tabBarSpace = useGlassTabBarSpace();
   const activeEvents = useActiveEvents();
-  const services = useServicesCatalog();
-  const globalForm = useGlobalForm();
-  const requests = useQuery({
-    queryKey: ["my-captured-requests", user?.id],
-    queryFn: () => requestsService.listByCapturista(user!.id),
-    enabled: Boolean(user?.id),
-  });
-  const canSeeSecretaryRequests = Boolean(
-    user?.role === "secretaria" ||
-    user?.role === "capturista_secretaria" ||
-    user?.role === "enlace" ||
-    user?.role === "gestor" ||
-    user?.role === "super_admin",
-  );
-  const secretaryRequests = useQuery({
-    queryKey: ["my-secretary-requests", user?.id],
-    queryFn: async () => {
-      try {
-        return await identityApi.listMySecretaryRequests();
-      } catch {
-        const legacy = await identityApi.listSecretaryRequests();
-        return {
-          requests: legacy.requests.filter(
-            (request) => request.capturedByUserId === user?.id,
-          ),
-        };
-      }
-    },
-    enabled: Boolean(user?.id) && canSeeSecretaryRequests,
-    staleTime: 30_000,
-  });
+  const myRequests = useMyRequests();
+  const sharedEventId = useSelectedEventId();
+  const [kind, setKind] = useState<MyRequestKind | "all">("all");
+  const [status, setStatus] = useState<string>("all");
+  const [search, setSearch] = useState("");
 
-  const effectiveEventId =
-    selectedEventId && activeEvents.data?.some((event) => event.id === selectedEventId)
-      ? selectedEventId
-      : activeEvents.data?.[0]?.id || "";
-  const selectedEvent = activeEvents.data?.find((event) => event.id === effectiveEventId);
-  const serviceNames = useMemo(
-    () => Object.fromEntries((services.data || []).map((service) => [service.id, service.name])),
-    [services.data],
-  );
-  const globalFieldLabels = useMemo(
-    () => Object.fromEntries((globalForm.data?.fields || []).map((field) => [field.key, field.label])),
-    [globalForm.data?.fields],
-  );
-  const serviceFieldLabels = useMemo(
-    () => Object.fromEntries((services.data || []).map((service) => [
-      service.id,
-      Object.fromEntries((service.formConfig?.fields || []).map((field) => [field.key, field.label])),
-    ])),
-    [services.data],
-  );
-  const requestsForEvent = useMemo(
-    () => (requests.data || []).filter((request) => request.eventId === effectiveEventId),
-    [requests.data, effectiveEventId],
-  );
-  const secretaryRequestsForEvent = useMemo(
+  const events = activeEvents.data || [];
+  const effectiveEventId = events.some((event) => event.id === sharedEventId)
+    ? sharedEventId
+    : events[0]?.id || "";
+
+  const eventItems = useMemo(
     () =>
-      (secretaryRequests.data?.requests || []).filter(
-        (request) => request.eventId === effectiveEventId,
+      myRequests.items.filter(
+        (item) => item.eventId === effectiveEventId && (kind === "all" || item.kind === kind),
       ),
-    [secretaryRequests.data?.requests, effectiveEventId],
+    [myRequests.items, effectiveEventId, kind],
   );
-  const showRegular = requestType !== "secretary";
-  const showSecretary = canSeeSecretaryRequests && requestType !== "regular";
-  const capturedTotal =
-    requestType === "regular"
-      ? requestsForEvent.length
-      : requestType === "secretary"
-        ? secretaryRequestsForEvent.length
-        : requestsForEvent.length + secretaryRequestsForEvent.length;
-  const loading = activeEvents.isLoading || services.isLoading || globalForm.isLoading || requests.isLoading || (canSeeSecretaryRequests && secretaryRequests.isLoading);
+
+  // Estatus presentes en el evento (y tipo) elegido, con su cantidad.
+  const statusCounts = useMemo(() => {
+    const counts = new Map<string, { label: string; count: number }>();
+    eventItems.forEach((item) => {
+      const current = counts.get(item.status);
+      counts.set(item.status, { label: item.statusLabel, count: (current?.count || 0) + 1 });
+    });
+    return [...counts.entries()].sort((first, second) => second[1].count - first[1].count);
+  }, [eventItems]);
+  const effectiveStatus = statusCounts.some(([value]) => value === status) ? status : "all";
+
+  const visibleItems = useMemo(() => {
+    const query = normalize(search.trim());
+    return eventItems
+      .filter((item) => effectiveStatus === "all" || item.status === effectiveStatus)
+      .filter(
+        (item) =>
+          !query ||
+          normalize(`${item.folio} ${item.title} ${item.applicantName || ""}`).includes(query),
+      );
+  }, [eventItems, effectiveStatus, search]);
+
+  const groups = useMemo(() => {
+    const result: { label: string; items: MyRequestItem[] }[] = [];
+    visibleItems.forEach((item) => {
+      const label = dayLabel(item.date);
+      const last = result[result.length - 1];
+      if (last?.label === label) last.items.push(item);
+      else result.push({ label, items: [item] });
+    });
+    return result;
+  }, [visibleItems]);
+
+  const hasFilters = Boolean(search.trim()) || effectiveStatus !== "all" || kind !== "all";
+  const clearFilters = () => {
+    setSearch("");
+    setStatus("all");
+    setKind("all");
+  };
+
+  const loading = activeEvents.isLoading || myRequests.isLoading;
+  const error = activeEvents.error || myRequests.error;
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="border-b border-border bg-background px-6 pb-5"
-        style={{ paddingTop: insets.top + 16 }}
-      >
-        <Text className="text-center text-xl font-bold">Mis solicitudes</Text>
-        <Text className="mt-1 text-center text-sm text-muted-foreground">
-          Consulta las solicitudes que has capturado por evento.
-        </Text>
-      </View>
-
-      <ScrollView
-        className="flex-1"
+      <CollapsingHeaderScrollView
+        title="Mis solicitudes"
+        subtitle="Consulta las solicitudes que has capturado por evento."
+        largeTitleAlign="center"
+        keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           paddingHorizontal: 24,
-          paddingTop: 20,
-          paddingBottom: insets.bottom + 24,
+          paddingBottom: tabBarSpace + 8,
         }}
         refreshControl={
           <RefreshControl
-            refreshing={requests.isRefetching}
+            refreshing={myRequests.isRefetching}
             onRefresh={() => {
-              void Promise.all([
-                requests.refetch(),
-                activeEvents.refetch(),
-                services.refetch(),
-                ...(canSeeSecretaryRequests ? [secretaryRequests.refetch()] : []),
-              ]);
+              void Promise.all([myRequests.refetch(), activeEvents.refetch()]);
             }}
+            tintColor="#981646"
+            colors={["#981646"]}
           />
         }
       >
-        <View className="mx-auto w-full max-w-[672px] gap-5">
-          {canSeeSecretaryRequests ? (
-            <View className="flex-row rounded-xl bg-muted p-1">
-              {([
-                ["all", "Todas"],
-                ["regular", "Trámites"],
-                ["secretary", "Secretaria"],
-              ] as const).map(([value, label]) => (
-                <Pressable
-                  key={value}
-                  onPress={() => setRequestType(value)}
-                  className={`flex-1 rounded-lg px-2 py-2.5 ${requestType === value ? "bg-background" : ""}`}
-                >
-                  <Text className={`text-center text-xs ${requestType === value ? "font-bold text-primary" : "text-muted-foreground"}`}>
-                    {label}
-                  </Text>
-                </Pressable>
+        <View className="mx-auto w-full max-w-[672px] gap-3">
+          {events.length ? (
+            <GlassSelect
+              leftIcon="ci:calendar-event"
+              placeholder="Selecciona un evento activo"
+              options={events.map((event) => ({
+                value: event.id,
+                label: event.name,
+                description: `${event.municipality} · ${event.venue}`,
+              }))}
+              value={effectiveEventId}
+              onChange={setSelectedEventId}
+            />
+          ) : null}
+
+          {events.length ? (
+            <GlassInput
+              leftIcon="ci:search-magnifying-glass"
+              returnKeyType="search"
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Buscar folio, trámite o solicitante"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          ) : null}
+
+          {myRequests.withSecretary && events.length ? (
+            <View className="flex-row gap-2">
+              {KIND_FILTERS.map((filter) => (
+                <FilterChip
+                  key={filter.value}
+                  label={filter.label}
+                  selected={kind === filter.value}
+                  onPress={() => setKind(filter.value)}
+                />
               ))}
             </View>
           ) : null}
 
-          {activeEvents.data?.length ? (
-            <View className="gap-3">
-              <Text className="font-semibold">Selecciona un evento</Text>
-              <Select
-                value={selectedEvent ? { label: selectedEvent.name, value: selectedEvent.id } : undefined}
-                onValueChange={(option) => {
-                  if (option?.value) setSelectedEventId(option.value);
-                }}
-              >
-                <SelectTrigger className="h-12 w-full rounded-xl px-4">
-                  <SelectValue placeholder="Selecciona un evento activo" />
-                </SelectTrigger>
-                <SelectContent
-                  insets={{ top: insets.top, bottom: insets.bottom, left: 16, right: 16 }}
-                >
-                  <SelectGroup>
-                    {activeEvents.data.map((event) => (
-                      <SelectItem
-                        key={event.id}
-                        label={`${event.name} · ${event.municipality}`}
-                        value={event.id}
-                      >
-                        {event.name} · {event.municipality}
-                      </SelectItem>
-                    ))}
-                  </SelectGroup>
-                </SelectContent>
-              </Select>
-              {selectedEvent ? (
-                <Text className="text-xs text-muted-foreground">
-                  {selectedEvent.venue} · {selectedEvent.locality}
+          {statusCounts.length ? (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 8 }}
+            >
+              <FilterChip
+                label="Todos"
+                count={eventItems.length}
+                selected={effectiveStatus === "all"}
+                onPress={() => setStatus("all")}
+              />
+              {statusCounts.map(([value, { label, count }]) => (
+                <FilterChip
+                  key={value}
+                  label={label}
+                  count={count}
+                  selected={effectiveStatus === value}
+                  onPress={() => setStatus(value)}
+                />
+              ))}
+            </ScrollView>
+          ) : null}
+
+          <View className="mt-2">
+            {loading ? (
+              [0, 1, 2, 3].map((index) => <RequestListItemSkeleton key={index} />)
+            ) : error ? (
+              <View className="rounded-2xl border border-destructive/30 bg-card p-5">
+                <Text className="font-semibold text-destructive">
+                  No fue posible cargar tus solicitudes.
                 </Text>
-              ) : null}
-            </View>
-          ) : null}
-
-          {selectedEvent ? (
-            <View className="rounded-2xl bg-primary p-5">
-              <Text className="text-sm text-primary-foreground/80">Capturas realizadas en</Text>
-              <Text className="mt-1 text-lg font-bold text-primary-foreground">
-                {selectedEvent.name}
-              </Text>
-              <Text className="mt-4 text-4xl font-bold text-primary-foreground">
-                {capturedTotal}
-              </Text>
-              <Text className="mt-1 text-sm text-primary-foreground/80">
-                {capturedTotal === 1 ? "solicitud capturada" : "solicitudes capturadas"}
-              </Text>
-            </View>
-          ) : null}
-
-          {loading ? (
-            <View className="items-center py-12">
-              <ActivityIndicator color="#981646" />
-              <Text className="mt-3 text-muted-foreground">Cargando solicitudes...</Text>
-            </View>
-          ) : activeEvents.error || requests.error || secretaryRequests.error ? (
-            <View className="rounded-2xl border border-destructive/30 bg-card p-5">
-              <Text className="font-semibold text-destructive">
-                No fue posible cargar tus solicitudes.
-              </Text>
-              <Button className="mt-4" onPress={() => {
-                void requests.refetch();
-                if (canSeeSecretaryRequests) void secretaryRequests.refetch();
-              }}>
-                <Text>Reintentar</Text>
-              </Button>
-            </View>
-          ) : (
-            <>
-              {showRegular ? (
-                !activeEvents.data?.length ? (
-                  <View className="items-center rounded-2xl border border-border bg-card px-5 py-12">
-                    <Text className="text-lg font-bold">No hay eventos activos</Text>
-                    <Text className="mt-2 text-center text-muted-foreground">Las capturas de trámites aparecerán cuando exista un evento activo.</Text>
-                  </View>
-                ) : requestsForEvent.length ? (
-                  <View className="gap-3">
-                    <Text className="text-lg font-bold">Trámites regulares</Text>
-                    {requestsForEvent.map((request) => (
-                      <View key={request.id} className="rounded-2xl border border-border bg-card p-4">
-                        <View className="flex-row items-start justify-between gap-3">
-                          <View className="flex-1">
-                            <Text className="font-bold text-primary">{request.folio}</Text>
-                            <Text className="mt-1 font-semibold">{serviceNames[request.serviceId] || "Trámite no disponible"}</Text>
-                            <Text className="mt-2 self-start rounded-full bg-muted px-2 py-1 text-[10px] font-semibold">Trámite regular</Text>
-                          </View>
-                          <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">{request.status === "en_espera_apertura" ? "En espera de apertura" : request.status.replaceAll("_", " ")}</Text>
-                        </View>
-                        <View className="mt-3 flex-row items-center justify-between gap-3">
-                          <Text className="text-xs text-muted-foreground">{new Date(request.requestedAt).toLocaleString("es-MX")}</Text>
-                          {request.priorityOnReopening ? <Text className="rounded-full bg-amber-100 px-2 py-1 text-xs font-semibold text-amber-800">Prioritaria</Text> : null}
-                        </View>
-                        <Button
-                          className="mt-4 w-full"
-                          variant="outline"
-                          onPress={() => setExpandedRequest((current) => current === `regular-${request.id}` ? null : `regular-${request.id}`)}
-                        >
-                          <Text>{expandedRequest === `regular-${request.id}` ? "Ocultar detalle" : "Ver detalle"}</Text>
-                        </Button>
-                        {expandedRequest === `regular-${request.id}` ? (
-                          <View className="mt-4 gap-4 border-t border-border pt-4">
-                            <View>
-                              <Text className="mb-3 font-bold">Datos del solicitante</Text>
-                              <DetailRows data={request.applicantData} labels={globalFieldLabels} />
-                            </View>
-                            <View>
-                              <Text className="mb-3 font-bold">Datos del trámite</Text>
-                              <DetailRows data={request.requestData} labels={serviceFieldLabels[request.serviceId]} />
-                            </View>
-                            {request.notes ? (
-                              <View><Text className="font-bold">Observaciones</Text><Text className="mt-1 text-sm">{request.notes}</Text></View>
-                            ) : null}
-                          </View>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
+                <Button
+                  className="mt-4"
+                  onPress={() => {
+                    void Promise.all([myRequests.refetch(), activeEvents.refetch()]);
+                  }}
+                >
+                  <Text>Reintentar</Text>
+                </Button>
+              </View>
+            ) : !events.length ? (
+              <View className="items-center rounded-2xl border border-border bg-card px-5 py-12">
+                <Text className="text-lg font-bold">No hay eventos activos</Text>
+                <Text className="mt-2 text-center text-muted-foreground">
+                  Tus capturas aparecerán cuando exista un evento activo.
+                </Text>
+              </View>
+            ) : !visibleItems.length ? (
+              <View className="items-center rounded-2xl border border-border bg-card px-5 py-10">
+                <Text className="text-center font-bold">
+                  {hasFilters ? "No hay solicitudes con esos filtros" : "Aún no hay capturas en este evento"}
+                </Text>
+                {hasFilters ? (
+                  <Pressable onPress={clearFilters}>
+                    <Text className="mt-2 text-center text-primary">Limpiar filtros</Text>
+                  </Pressable>
                 ) : (
-                  <View className="items-center rounded-2xl border border-border bg-card px-5 py-10">
-                    <Text className="font-bold">Sin trámites en este evento</Text>
-                  </View>
-                )
-              ) : null}
-
-              {showSecretary ? (
-                secretaryRequestsForEvent.length ? (
-                  <View className="gap-3">
-                    <View className="flex-row items-center justify-between gap-3">
-                      <Text className="text-lg font-bold">Atención de Secretaria</Text>
-                      <Text className="rounded-full bg-primary/10 px-3 py-1 text-xs font-bold text-primary">{secretaryRequestsForEvent.length}</Text>
-                    </View>
-                    {secretaryRequestsForEvent.map((request) => (
-                      <View key={`secretary-${request.id}`} className="rounded-2xl border border-border bg-card p-4">
-                        <View className="flex-row items-start justify-between gap-3">
-                          <View className="min-w-0 flex-1">
-                            <Text className="font-bold text-primary">{request.folio}</Text>
-                            <Text className="mt-1 font-semibold">{request.subject}</Text>
-                          </View>
-                          <Text className="rounded-full bg-muted px-3 py-1 text-xs capitalize">{request.status.replaceAll("_", " ")}</Text>
-                        </View>
-                        <Text className="mt-3 text-xs text-muted-foreground">{new Date(request.createdAt).toLocaleString("es-MX")}</Text>
-                        <Button
-                          className="mt-4 w-full"
-                          variant="outline"
-                          onPress={() => setExpandedRequest((current) => current === `secretary-${request.id}` ? null : `secretary-${request.id}`)}
-                        >
-                          <Text>{expandedRequest === `secretary-${request.id}` ? "Ocultar detalle" : "Ver detalle"}</Text>
-                        </Button>
-                        {expandedRequest === `secretary-${request.id}` ? (
-                          <View className="mt-4 gap-4 border-t border-border pt-4">
-                            <View><Text className="mb-3 font-bold">Datos del solicitante</Text><DetailRows data={request.applicantData} labels={globalFieldLabels} /></View>
-                            <View className="gap-2">
-                              <Text><Text className="font-bold">Procedencia: </Text>{request.source.replaceAll("_", " ")}</Text>
-                              <Text><Text className="font-bold">Ruta de atención: </Text>{request.route.replaceAll("_", " ")}</Text>
-                              {request.officeNumber ? <Text><Text className="font-bold">Número de oficio: </Text>{request.officeNumber}</Text> : null}
-                              {request.officeDate ? <Text><Text className="font-bold">Fecha del oficio: </Text>{new Date(request.officeDate).toLocaleDateString("es-MX")}</Text> : null}
-                              {request.notes ? <Text><Text className="font-bold">Observaciones: </Text>{request.notes}</Text> : null}
-                              <Text><Text className="font-bold">Documentos adjuntos: </Text>{request.documents.length}</Text>
-                            </View>
-                          </View>
-                        ) : null}
-                      </View>
-                    ))}
-                  </View>
-                ) : (
-                  <View className="items-center rounded-2xl border border-amber-200 bg-amber-50 px-5 py-10">
-                    <Text className="font-bold text-amber-950">Sin capturas de Secretaría</Text>
-                    <Text className="mt-2 text-center text-sm text-amber-800">Las solicitudes institucionales que registres aparecerán aquí.</Text>
-                  </View>
-                )
-              ) : null}
-            </>
-          )}
+                  <Text className="mt-2 text-center text-sm text-muted-foreground">
+                    Las solicitudes que registres aparecerán aquí.
+                  </Text>
+                )}
+              </View>
+            ) : (
+              groups.map((group) => (
+                <View key={group.label} className="mb-2">
+                  <Text className="mb-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                    {group.label}
+                  </Text>
+                  {group.items.map((item) => (
+                    <RequestListItem
+                      key={item.key}
+                      item={item}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/solicitud/[id]",
+                          params: { id: item.id, kind: item.kind },
+                        } as any)
+                      }
+                    />
+                  ))}
+                </View>
+              ))
+            )}
+          </View>
         </View>
-      </ScrollView>
+      </CollapsingHeaderScrollView>
     </View>
   );
 }

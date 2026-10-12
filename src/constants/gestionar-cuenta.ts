@@ -2,9 +2,7 @@ import { SettingsGroup } from "@/src/types/gestionar-cuenta";
 
 export const createSettingsGroups = (
   handlers: {
-    handleChangeProfilePhoto: () => void;
-    handleUpdateName: () => void;
-    handleChangePassword: () => void;
+    handleEditProfile: () => void;
     handleEnable2FA: () => void;
     handlePrivacyPolicy: () => void;
     handleTermsAndConditions: () => void;
@@ -17,18 +15,11 @@ export const createSettingsGroups = (
     title: "Perfil",
     options: [
       {
-        id: "profile-photo",
-        title: "Cambiar foto de perfil",
-        description: "Actualiza tu foto de perfil",
+        id: "edit-profile",
+        title: "Editar perfil",
+        description: "Foto, nombre y contraseña",
         iconName: "material-symbols:account-circle-outline",
-        onPress: handlers.handleChangeProfilePhoto,
-      },
-      {
-        id: "update-name",
-        title: "Actualizar nombre",
-        description: "Modifica tu nombre completo",
-        iconName: "material-symbols:edit-outline",
-        onPress: handlers.handleUpdateName,
+        onPress: handlers.handleEditProfile,
       },
     ],
   },
@@ -36,13 +27,6 @@ export const createSettingsGroups = (
     id: "security",
     title: "Seguridad",
     options: [
-      {
-        id: "password",
-        title: "Cambiar contraseña",
-        description: "Actualiza tu contraseña de acceso",
-        iconName: "material-symbols:lock-outline",
-        onPress: handlers.handleChangePassword,
-      },
       {
         id: "2fa",
         title: "Autenticación en 2 pasos",

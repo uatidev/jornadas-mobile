@@ -1,4 +1,3 @@
-import { Button } from "@/src/components/ui/button";
 import { THEME } from "@/src/components/ui/lib/theme";
 import {
   Select,
@@ -94,6 +93,11 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
               className="h-auto w-full rounded-xl border-transparent bg-transparent py-2 shadow-none"
               iconClassName="size-7"
             >
+              <Monicon
+                name="mdi:map-marker"
+                size={22}
+                color={THEME[colorScheme].primary}
+              />
               {selectedEvent ? (
                 <View className="min-w-0 flex-1">
                   <Text className="text-sm font-bold" numberOfLines={1}>
@@ -101,7 +105,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
                   </Text>
                 </View>
               ) : (
-                <Text className="text-sm text-muted-foreground">
+                <Text className="flex-1 text-sm text-muted-foreground">
                   Seleccionar evento
                 </Text>
               )}
@@ -148,21 +152,7 @@ export const HomeHeader: React.FC<HomeHeaderProps> = ({
             />
           </Button> */}
           <UserMenu user={user} onLogout={onLogout} />
-        </View> : (
-          <Button
-            variant="ghost"
-            size="icon"
-            onPress={onLogout}
-            className="rounded-full"
-            accessibilityLabel="Cerrar sesión"
-          >
-            <Monicon
-              name="ic:outline-logout"
-              size={24}
-              color={THEME[colorScheme].destructive}
-            />
-          </Button>
-        )}
+        </View> : null}
       </View>
 
       {/* <Text className="text-2xl font-bold text-foreground">

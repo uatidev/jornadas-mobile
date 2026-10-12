@@ -18,13 +18,15 @@ import {
   ScrollView,
   StyleSheet,
   TouchableWithoutFeedback,
+  useWindowDimensions,
   View,
 } from "react-native";
 import Animated, {
   FadeIn,
   FadeOut,
-  SlideInDown,
-  SlideOutDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
@@ -117,6 +119,21 @@ function SelectContent({
   const backgroundColor = THEME[colorScheme].background;
   const borderColor = THEME[colorScheme].border;
   const context = SelectPrimitive.useRootContext();
+  const { height: windowHeight } = useWindowDimensions();
+  const isOpen = !!context.open;
+
+  // Animación manual del sheet: las animaciones `entering` de Reanimated no
+  // son confiables dentro de un Modal en Android y dejan el sheet desplazado.
+  const sheetOffset = useSharedValue(windowHeight);
+  React.useEffect(() => {
+    if (isOpen) {
+      sheetOffset.value = windowHeight;
+      sheetOffset.value = withSpring(0, { damping: 22, stiffness: 220 });
+    }
+  }, [isOpen, windowHeight, sheetOffset]);
+  const sheetStyle = useAnimatedStyle(() => ({
+    transform: [{ translateY: sheetOffset.value }],
+  }));
 
   const handleClose = () => {
     context.onOpenChange?.(false);
@@ -126,11 +143,12 @@ function SelectContent({
   if (Platform.OS !== "web") {
     return (
       <Modal
-        visible={context.open}
+        visible={isOpen}
         transparent
-        animationType="none"
+        animationType="fade"
         onRequestClose={handleClose}
         statusBarTranslucent
+        navigationBarTranslucent
         hardwareAccelerated
       >
         <TouchableWithoutFeedback onPress={handleClose}>
@@ -142,9 +160,7 @@ function SelectContent({
           />
         </TouchableWithoutFeedback>
         <Animated.View
-          entering={SlideInDown.springify().stiffness(1000)}
-          exiting={SlideOutDown.springify().stiffness(1000)}
-          style={{
+          style={[sheetStyle, {
             position: "absolute",
             bottom: 0,
             left: 0,
@@ -154,9 +170,10 @@ function SelectContent({
             borderTopRightRadius: 20,
             borderTopWidth: 1,
             borderColor,
-            maxHeight: "80%",
+            // Alto en números: el porcentaje se calcula distinto en Android.
+            maxHeight: windowHeight * 0.8 - safeAreaInsets.top,
             paddingBottom: (insets?.bottom ?? safeAreaInsets.bottom) + 16,
-          }}
+          }]}
         >
           {/* Handle bar */}
           <View
@@ -172,7 +189,8 @@ function SelectContent({
           />
           <ScrollView
             showsVerticalScrollIndicator={false}
-            style={{ flex: 1 }}
+            // flex: 1 dentro de un padre sin alto fijo colapsa la lista en Android.
+            style={{ flexGrow: 0, flexShrink: 1 }}
             contentContainerStyle={{
               paddingHorizontal: 16,
               paddingVertical: 8,

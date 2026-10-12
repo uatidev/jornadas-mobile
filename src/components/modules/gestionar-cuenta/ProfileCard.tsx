@@ -1,10 +1,10 @@
-import { Avatar, AvatarFallback } from "@/src/components/ui/avatar";
 import { THEME } from "@/src/components/ui/lib/theme";
 import { Text } from "@/src/components/ui/text";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { UserData } from "@/src/services/auth";
 import { filesService } from "@/src/services/files";
-import { Image, View } from "react-native";
+import { Image, StyleSheet, View } from "react-native";
+import { GlassSurface, liquidGlassEnabled } from "@/src/components/common/GlassSurface";
 
 interface ProfileCardProps {
   user: UserData | null;
@@ -23,58 +23,64 @@ const ROLE_LABELS: Record<string, string> = {
   solicitante: "Solicitante",
 };
 
+// Constante fuera del componente: un objeto nuevo en cada render hace que el
+// Liquid Glass repita su animación de entrada.
+const GLASS_APPEAR = { style: "regular", animate: true } as const;
+
 const getRoleLabel = (role: string) => ROLE_LABELS[role] || role;
+
+/** URL de la foto de perfil del usuario (o null si no tiene). */
+export function getProfilePhotoUrl(user: UserData | null): string | null {
+  let fileId: string | null = null;
+
+  // Prioridad 1: Si tenemos el fileId directamente
+  if (user?.profilePhotoFileId) {
+    fileId = user.profilePhotoFileId;
+  }
+  // Prioridad 2: Si hay profilePhoto, extraer el fileId de la URL
+  else if (user?.profilePhoto) {
+    // Extraer el fileId de la URL (formato: /storage/buckets/.../files/FILE_ID/view?...)
+    const fileIdMatch = user.profilePhoto.match(/\/files\/([a-zA-Z0-9]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      fileId = fileIdMatch[1];
+    }
+    // Si la URL ya es completa (empieza con http/https), usarla directamente
+    else if (user.profilePhoto.startsWith("http://") || user.profilePhoto.startsWith("https://")) {
+      return user.profilePhoto;
+    }
+  }
+
+  // Si tenemos un fileId, construir la URL completa
+  if (fileId) {
+    return filesService.getImageUrl(fileId, "images");
+  }
+
+  return null;
+}
 
 export function ProfileCard({ user, getInitials }: ProfileCardProps) {
   const { colorScheme } = useTheme();
-  const cardForegroundColor = THEME[colorScheme].cardForeground;
-  const mutedForegroundColor = THEME[colorScheme].mutedForeground;
+  const palette = THEME[colorScheme];
 
   const fullName = [user?.nombre, user?.primerApellido, user?.segundoApellido]
     .filter(Boolean)
     .join(" ");
 
-  // Generar URL de la imagen construyendo la URL completa manualmente
-  const imageUrl = (() => {
-    let fileId: string | null = null;
+  const imageUrl = getProfilePhotoUrl(user);
 
-    // Prioridad 1: Si tenemos el fileId directamente
-    if (user?.profilePhotoFileId) {
-      fileId = user.profilePhotoFileId;
-    }
-    // Prioridad 2: Si hay profilePhoto, extraer el fileId de la URL
-    else if (user?.profilePhoto) {
-      // Extraer el fileId de la URL (formato: /storage/buckets/.../files/FILE_ID/view?...)
-      const fileIdMatch = user.profilePhoto.match(/\/files\/([a-zA-Z0-9]+)/);
-      if (fileIdMatch && fileIdMatch[1]) {
-        fileId = fileIdMatch[1];
-      }
-      // Si la URL ya es completa (empieza con http/https), usarla directamente
-      else if (user.profilePhoto.startsWith("http://") || user.profilePhoto.startsWith("https://")) {
-        return user.profilePhoto;
-      }
-    }
-
-    // Si tenemos un fileId, construir la URL completa
-    if (fileId) {
-      return filesService.getImageUrl(fileId, "images");
-    }
-
-    return null;
-  })();
+  const roles = user?.labels?.length ? user.labels : user?.role ? [user.role] : [];
 
   return (
-    <View
-      className="flex-row items-center gap-4 overflow-hidden rounded-2xl border border-border bg-card px-4 py-5"
-      style={{
-        borderRadius: 16,
-      }}
+    <GlassSurface
+      colorScheme={colorScheme}
+      style={styles.card}
+      glassEffectStyle={liquidGlassEnabled ? GLASS_APPEAR : "regular"}
     >
-      {imageUrl ? (
-        <View className="size-16 rounded-full overflow-hidden bg-primary items-center justify-center">
+      <View style={styles.avatarRing}>
+        {imageUrl ? (
           <Image
             source={{ uri: imageUrl }}
-            style={{ width: 64, height: 64 }}
+            style={styles.avatar}
             resizeMode="cover"
             onError={(error) => {
               // Evitar error de estructura cíclica en JSON.stringify
@@ -87,79 +93,66 @@ export function ProfileCard({ user, getInitials }: ProfileCardProps) {
               console.error("Error cargando imagen de perfil:", errorInfo);
             }}
           />
-        </View>
-      ) : (
-        <Avatar
-          alt={`${user?.nombre || "Usuario"}'s avatar`}
-          className="size-16"
-        >
-          <AvatarFallback className="bg-primary">
-            <Text className="text-primary-foreground text-xl font-semibold">
+        ) : (
+          <View style={[styles.avatar, styles.initials, { backgroundColor: palette.primary }]}>
+            <Text className="text-2xl font-semibold" style={{ color: palette.primaryForeground }}>
               {getInitials()}
             </Text>
-          </AvatarFallback>
-        </Avatar>
-      )}
-      <View className="flex-1">
-        <Text
-          className="text-lg font-semibold"
-          style={{ color: cardForegroundColor }}
-        >
-          {fullName || "Usuario"}
-        </Text>
-        {user?.email && (
-          <Text
-            className="text-sm mt-1"
-            style={{ color: mutedForegroundColor }}
-          >
-            {user.email}
-          </Text>
+          </View>
         )}
-        {(user?.labels && user.labels.length > 0) ? (
-          <View className="mt-2 flex-row flex-wrap gap-2">
-            {user.labels.map((label, index) => (
-              <View
-                key={index}
-                className="px-2 py-1 rounded-full"
-                style={{
-                  backgroundColor:
-                    colorScheme === "dark"
-                      ? "rgba(255, 255, 255, 0.1)"
-                      : "rgba(0, 0, 0, 0.05)",
-                }}
-              >
-                <Text
-                  className="text-xs font-medium"
-                  style={{ color: mutedForegroundColor }}
-                >
-                  {getRoleLabel(label)}
-                </Text>
-              </View>
-            ))}
-          </View>
-        ) : user?.role ? (
-          <View className="mt-2">
-            <View
-              className="px-2 py-1 rounded-full self-start"
-              style={{
-                backgroundColor:
-                  colorScheme === "dark"
-                    ? "rgba(255, 255, 255, 0.1)"
-                    : "rgba(0, 0, 0, 0.05)",
-              }}
-            >
-              <Text
-                className="text-xs font-medium"
-                style={{ color: mutedForegroundColor }}
-              >
-                {getRoleLabel(user.role)}
-              </Text>
-            </View>
-          </View>
-        ) : null}
       </View>
-    </View>
+
+      <Text
+        numberOfLines={2}
+        className="mt-3 text-center text-xl font-bold"
+        style={{ color: palette.foreground }}
+      >
+        {fullName || "Usuario"}
+      </Text>
+      {user?.email ? (
+        <Text
+          numberOfLines={1}
+          className="mt-0.5 text-center text-sm"
+          style={{ color: palette.mutedForeground }}
+        >
+          {user.email}
+        </Text>
+      ) : null}
+      {roles.length ? (
+        <View className="mt-3 flex-row flex-wrap justify-center gap-2">
+          {roles.map((role) => (
+            <View key={role} className="rounded-full bg-primary/10 px-3 py-1">
+              <Text className="text-xs font-semibold text-primary">{getRoleLabel(role)}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </GlassSurface>
   );
 }
 
-
+const styles = StyleSheet.create({
+  card: {
+    width: "100%",
+    alignItems: "center",
+    borderRadius: 28,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+  },
+  avatarRing: {
+    alignSelf: "center",
+    padding: 3,
+    borderRadius: 48,
+    backgroundColor: "rgba(255, 255, 255, 0.85)",
+  },
+  avatar: {
+    width: 84,
+    height: 84,
+    borderRadius: 42,
+    overflow: "hidden",
+  },
+  initials: {
+    alignItems: "center",
+    justifyContent: "center",
+  },
+});

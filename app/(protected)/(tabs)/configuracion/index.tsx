@@ -1,28 +1,28 @@
 import {
-  ChangePasswordModal,
-  ChangeProfilePhotoModal,
   DeleteAccountDialog,
   ProfileCard,
+  SettingsCard,
   SettingsGroup,
-  UpdateNameModal,
+  SettingsRow,
 } from "@/src/components/modules/gestionar-cuenta";
-import { Button } from "@/src/components/ui/button";
 import { Switch } from "@/src/components/ui/switch";
+import { THEME } from "@/src/components/ui/lib/theme";
 import { Text } from "@/src/components/ui/text";
 import { useGestionarCuenta } from "@/src/hooks/useGestionarCuenta";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
-import Monicon from "@monicon/native";
 import Constants from "expo-constants";
+import { LinearGradient } from "expo-linear-gradient";
 import { useState } from "react";
-import { ActivityIndicator, ScrollView, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { StyleSheet, View } from "react-native";
+import { CollapsingHeaderScrollView } from "@/src/components/common/CollapsingHeader";
+import { useGlassTabBarSpace } from "@/src/components/common/GlassTabBar";
 
 const APP_VERSION =
   process.env.EXPO_PUBLIC_APP_VERSION || Constants.expoConfig?.version || "—";
 
 export default function ConfiguracionScreen() {
-  const insets = useSafeAreaInsets();
+  const tabBarSpace = useGlassTabBarSpace();
   const { logout } = useAuth();
   const { colorScheme, setThemePreference } = useTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -30,17 +30,9 @@ export default function ConfiguracionScreen() {
     user,
     showDeleteDialog,
     setShowDeleteDialog,
-    showChangeProfilePhotoModal,
-    setShowChangeProfilePhotoModal,
-    showUpdateNameModal,
-    setShowUpdateNameModal,
-    showChangePasswordModal,
-    setShowChangePasswordModal,
     settingsGroups,
     getInitials,
-    getFullName,
     confirmDeleteAccount,
-    handleModalSuccess,
   } = useGestionarCuenta();
 
   const handleLogout = async () => {
@@ -54,98 +46,68 @@ export default function ConfiguracionScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      <View
-        className="border-b border-border px-6 pb-5"
-        style={{ paddingTop: insets.top + 16 }}
-      >
-        <Text className="text-center text-xl font-bold">Configuración</Text>
-        <Text className="mt-1 text-center text-sm text-muted-foreground">
-          Personaliza la aplicación y administra tu cuenta.
-        </Text>
-      </View>
-
-      <ScrollView
-        className="flex-1"
+      {/* Degradado de fondo: color primario arriba, fondo (blanco) abajo. */}
+      <LinearGradient
+        colors={[THEME[colorScheme].primary, THEME[colorScheme].background]}
+        locations={[0, 0.45]}
+        style={StyleSheet.absoluteFill}
+        pointerEvents="none"
+      />
+      <CollapsingHeaderScrollView
+        title="Configuración"
+        subtitle="Personaliza la aplicación y administra tu cuenta."
+        largeTitleAlign="center"
+        largeTitleClassName="text-white"
+        subtitleClassName="text-white/80"
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{
           padding: 16,
-          paddingBottom: insets.bottom + 28,
+          paddingBottom: tabBarSpace + 12,
         }}
       >
-        <View className="mx-auto w-full max-w-[672px] gap-4">
+        <View className="mx-auto w-full max-w-[672px]" style={{ gap: 20 }}>
           <ProfileCard user={user} getInitials={getInitials} />
 
-          <View className="overflow-hidden rounded-2xl border border-border bg-card">
-            <View className="border-b border-border px-4 py-3">
-              <Text className="text-sm font-bold text-muted-foreground">
-                APARIENCIA
-              </Text>
-            </View>
-            <View className="flex-row items-center gap-4 px-4 py-4">
-              <View className="h-10 w-10 items-center justify-center rounded-full bg-primary/10">
-                <Monicon
-                  name={colorScheme === "dark" ? "ic:outline-dark-mode" : "ic:outline-light-mode"}
-                  size={22}
-                  color="#981646"
+          <SettingsCard title="Apariencia">
+            <SettingsRow
+              icon={colorScheme === "dark" ? "ic:outline-dark-mode" : "ic:outline-light-mode"}
+              title="Modo oscuro"
+              description="Reduce el brillo y usa colores oscuros."
+              isLast
+              right={
+                <Switch
+                  checked={colorScheme === "dark"}
+                  onCheckedChange={(checked) => {
+                    void setThemePreference(checked ? "dark" : "light");
+                  }}
                 />
-              </View>
-              <View className="flex-1">
-                <Text className="font-semibold">Modo oscuro</Text>
-                <Text className="mt-1 text-xs text-muted-foreground">
-                  Reduce el brillo y usa colores oscuros.
-                </Text>
-              </View>
-              <Switch
-                checked={colorScheme === "dark"}
-                onCheckedChange={(checked) => {
-                  void setThemePreference(checked ? "dark" : "light");
-                }}
-              />
-            </View>
-          </View>
+              }
+            />
+          </SettingsCard>
 
           {settingsGroups.map((group) => (
             <SettingsGroup key={group.id} group={group} />
           ))}
 
-          <View className="rounded-2xl border border-border bg-card p-4">
-            <Text className="text-sm font-bold text-muted-foreground">Sesión</Text>
-            <Text className="mb-4 mt-1 text-xs text-muted-foreground">
-              Cierra tu sesión en este dispositivo.
-            </Text>
-            <Button
-              variant="destructive"
-              disabled={isLoggingOut}
+          <SettingsCard title="Sesión">
+            <SettingsRow
+              icon="ic:outline-logout"
+              title={isLoggingOut ? "Cerrando sesión..." : "Cerrar sesión"}
+              description="Cierra tu sesión en este dispositivo."
+              destructive
+              loading={isLoggingOut}
               onPress={handleLogout}
-            >
-              {isLoggingOut ? <ActivityIndicator size="small" color="white" /> : null}
-              <Text>{isLoggingOut ? "Cerrando sesión..." : "Cerrar sesión"}</Text>
-            </Button>
-          </View>
-          <Text className="text-sm text-center text-muted-foreground">{`Versión ${APP_VERSION}`}</Text>
+              isLast
+            />
+          </SettingsCard>
+          <Text className="text-center text-xs text-muted-foreground">{`Versión ${APP_VERSION}`}</Text>
         </View>
-      </ScrollView>
+      </CollapsingHeaderScrollView>
 
       <DeleteAccountDialog
         open={showDeleteDialog}
         onOpenChange={setShowDeleteDialog}
         onConfirm={confirmDeleteAccount}
-      />
-      <ChangeProfilePhotoModal
-        open={showChangeProfilePhotoModal}
-        onOpenChange={setShowChangeProfilePhotoModal}
-        onSuccess={handleModalSuccess}
-      />
-      <UpdateNameModal
-        open={showUpdateNameModal}
-        onOpenChange={setShowUpdateNameModal}
-        currentName={getFullName()}
-        onSuccess={handleModalSuccess}
-      />
-      <ChangePasswordModal
-        open={showChangePasswordModal}
-        onOpenChange={setShowChangePasswordModal}
-        onSuccess={handleModalSuccess}
       />
     </View>
   );

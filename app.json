@@ -82,7 +82,55 @@
           "backgroundColor": "#9A1445"
         }
       ],
-      "expo-font",
+      [
+        "expo-font",
+        {
+          "ios": {
+            "fonts": [
+              "./src/assets/fonts/poppins/Poppins_400Regular.ttf",
+              "./src/assets/fonts/poppins/Poppins_400Regular_Italic.ttf",
+              "./src/assets/fonts/poppins/Poppins_500Medium.ttf",
+              "./src/assets/fonts/poppins/Poppins_600SemiBold.ttf",
+              "./src/assets/fonts/poppins/Poppins_700Bold.ttf",
+              "./src/assets/fonts/poppins/Poppins_800ExtraBold.ttf"
+            ]
+          },
+          "android": {
+            "fonts": [
+              {
+                "fontFamily": "Poppins",
+                "fontDefinitions": [
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_400Regular.ttf",
+                    "weight": 400
+                  },
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_400Regular_Italic.ttf",
+                    "weight": 400,
+                    "style": "italic"
+                  },
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_500Medium.ttf",
+                    "weight": 500
+                  },
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_600SemiBold.ttf",
+                    "weight": 600
+                  },
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_700Bold.ttf",
+                    "weight": 700
+                  },
+                  {
+                    "path": "./src/assets/fonts/poppins/Poppins_800ExtraBold.ttf",
+                    "weight": 800
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ],
       "expo-web-browser",
       [
         "expo-location",

@@ -1,3 +1,5 @@
+import { GlassInput } from "@/src/components/common/GlassInput";
+import { GlassSurface } from "@/src/components/common/GlassSurface";
 import { Alert, AlertDescription, AlertTitle } from "@/src/components/ui/alert";
 import { Button } from "@/src/components/ui/button";
 import {
@@ -6,21 +8,12 @@ import {
   CardHeader,
   CardTitle
 } from "@/src/components/ui/card";
-import { Input } from "@/src/components/ui/input";
-import { Label } from "@/src/components/ui/label";
 import { Text } from "@/src/components/ui/text";
 import { useSignInForm } from "@/src/forms/useSignInForm";
-import { Monicon } from "@monicon/native";
-import { BlurView } from "expo-blur";
 import { AlertCircleIcon } from "lucide-react-native";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import { Controller } from "react-hook-form";
-import {
-  Image,
-  Pressable,
-  StyleSheet,
-  View,
-} from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 
 export function SignInForm() {
   const {
@@ -29,8 +22,6 @@ export function SignInForm() {
     errors,
     error,
     passwordInputRef,
-    showPassword,
-    setShowPassword,
     onEmailSubmitEditing,
     isLoading,
   } = useSignInForm();
@@ -42,20 +33,8 @@ export function SignInForm() {
 
   return (
     <View className="gap-6 w-full max-w-md">
-      <Card
-        className="overflow-hidden border-0 shadow-lg shadow-black/10 w-full"
-        style={{
-          backgroundColor:
-            colorScheme === "dark"
-              ? "rgba(23, 23, 23, 0.6)"
-              : "rgba(255, 255, 255, 0.6)",
-        }}
-      >
-        <BlurView
-          intensity={60}
-          tint={colorScheme === "dark" ? "dark" : "light"}
-          style={StyleSheet.absoluteFill}
-        />
+      <GlassSurface colorScheme={colorScheme} style={styles.glassCard}>
+      <Card className="w-full border-0 bg-transparent shadow-none">
         <CardHeader>
           <Image
             source={logoSource}
@@ -85,72 +64,47 @@ export function SignInForm() {
             </Alert>
           )}
           <View className="gap-6">
-            <View className="gap-1.5">
-              <Label htmlFor="email">Correo electrónico</Label>
-              <Controller
-                control={control}
-                name="email"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <Input
-                    id="email"
-                    placeholder="ejemplo@correo.com"
-                    keyboardType="email-address"
-                    autoComplete="email"
-                    autoCapitalize="none"
-                    value={value}
-                    onChangeText={onChange}
-                    onBlur={onBlur}
-                    onSubmitEditing={onEmailSubmitEditing}
-                    returnKeyType="next"
-                    submitBehavior="submit"
-                    className={errors.email ? "border-destructive" : ""}
-                  />
-                )}
-              />
-              {errors.email && (
-                <Text className="text-destructive text-sm">
-                  {errors.email.message}
-                </Text>
-              )}
-            </View>
-            <View className="gap-1.5">
-              <Label htmlFor="password">Contraseña</Label>
-              <View style={{ position: "relative" }}>
-                <Controller
-                  control={control}
-                  name="password"
-                  render={({ field: { onChange, onBlur, value } }) => (
-                    <Input
-                      ref={passwordInputRef}
-                      id="password"
-                      placeholder="Ingresa tu contraseña"
-                      secureTextEntry={!showPassword}
-                      value={value}
-                      onChangeText={onChange}
-                      onBlur={onBlur}
-                      returnKeyType="send"
-                      onSubmitEditing={handleSubmit}
-                      className={`pr-12 ${errors.password ? "border-destructive" : ""}`}
-                    />
-                  )}
+            <Controller
+              control={control}
+              name="email"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <GlassInput
+                  label="Correo electrónico"
+                  type="email"
+                  required
+                  placeholder="ejemplo@correo.com"
+                  autoComplete="email"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  onSubmitEditing={onEmailSubmitEditing}
+                  returnKeyType="next"
+                  submitBehavior="submit"
+                  error={errors.email?.message}
+                  help="Usa el correo con el que te dieron de alta en la plataforma."
                 />
-                <Pressable
-                  style={styles.eyeButton}
-                  onPress={() => setShowPassword(!showPassword)}
-                >
-                  <Monicon
-                    name={showPassword ? "mdi:eye-off" : "mdi:eye"}
-                    size={20}
-                    color="#981646"
-                  />
-                </Pressable>
-              </View>
-              {errors.password && (
-                <Text className="text-destructive text-sm">
-                  {errors.password.message}
-                </Text>
               )}
-            </View>
+            />
+            <Controller
+              control={control}
+              name="password"
+              render={({ field: { onChange, onBlur, value } }) => (
+                <GlassInput
+                  ref={passwordInputRef}
+                  label="Contraseña"
+                  type="password"
+                  required
+                  placeholder="Ingresa tu contraseña"
+                  autoComplete="password"
+                  value={value}
+                  onChangeText={onChange}
+                  onBlur={onBlur}
+                  returnKeyType="send"
+                  onSubmitEditing={handleSubmit}
+                  error={errors.password?.message}
+                />
+              )}
+            />
             {/* <View className="flex-row justify-end">
               <Link href="/(auth)/forgot-password" asChild>
                 <Text className="text-sm text-primary font-medium">
@@ -178,17 +132,15 @@ export function SignInForm() {
           </View>
         </CardContent>
       </Card>
+      </GlassSurface>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  eyeButton: {
-    position: "absolute",
-    right: 8,
-    top: "40%",
-    transform: [{ translateY: -10 }],
-    padding: 4,
-    zIndex: 1,
+  glassCard: {
+    width: "100%",
+    borderRadius: 28,
+    boxShadow: "0 12px 32px rgba(0, 0, 0, 0.18)",
   },
 });

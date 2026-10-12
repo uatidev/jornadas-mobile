@@ -4,8 +4,18 @@ import {
   useCatalogService,
   useServiceRequirements,
 } from "@/src/hooks/useCatalog";
+import {
+  SERVICE_STATUS_DOT_COLOR,
+  SERVICE_STATUS_LABEL,
+  getServiceStatus,
+} from "@/src/components/modules/home/ServiceCard";
+import { SettingsCard, SettingsRow } from "@/src/components/modules/gestionar-cuenta/SettingsCard";
+import { THEME } from "@/src/components/ui/lib/theme";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import Monicon from "@monicon/native";
-import { View } from "react-native";
+import { useState } from "react";
+import { StyleSheet, View } from "react-native";
+import type { ServiceFormField } from "@/src/types/catalog";
 import { DynamicGlobalForm } from "./DynamicGlobalForm";
 
 export type SpecificRequestData = Record<string, string>;
@@ -177,76 +187,75 @@ export function RequestIntro({
       required: true,
       order: index + 1,
     }));
-  const now = Date.now();
-  const isOpen = Boolean(
-    service?.active &&
-    (!service.opensAt || now >= new Date(service.opensAt).getTime()) &&
-    (!service.closesAt || now <= new Date(service.closesAt).getTime()),
-  );
+  const { colorScheme } = useTheme();
+  const palette = THEME[colorScheme];
+  // Hora fija al montar: el estado no debe cambiar entre renders.
+  const [now] = useState(() => Date.now());
+  const status = service ? getServiceStatus(service, now) : "open";
+  const isOpen = status === "open";
+  const formatDate = (iso: string) =>
+    new Date(iso).toLocaleDateString("es-MX", { day: "numeric", month: "long", year: "numeric" });
+  const period =
+    service?.opensAt && service?.closesAt
+      ? `Del ${formatDate(service.opensAt)} al ${formatDate(service.closesAt)}`
+      : service?.opensAt
+        ? `A partir del ${formatDate(service.opensAt)}`
+        : service?.closesAt
+          ? `Hasta el ${formatDate(service.closesAt)}`
+          : "Sin fechas definidas";
 
   return (
-    <View className="gap-5 rounded-2xl bg-card p-5">
-      <View className="gap-2">
-        <View className="self-start rounded-full bg-primary/10 px-3 py-1">
-          <Text className="text-xs font-semibold text-primary">
-            {isOpen ? "Trámite abierto" : "Trámite cerrado"}
+    <View style={styles.container}>
+      <View className="bg-card dark:border dark:border-border" style={[styles.card, styles.hero]}>
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: SERVICE_STATUS_DOT_COLOR[status] }]} />
+          <Text className="text-xs font-medium text-muted-foreground">
+            {SERVICE_STATUS_LABEL[status]}
           </Text>
         </View>
-        <Text className="text-2xl font-bold text-card-foreground">{title}</Text>
-        <Text className="text-muted-foreground">{subtitle}</Text>
+        <Text className="text-xl font-bold text-card-foreground">{title}</Text>
+        {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
       </View>
 
-      <View className="rounded-xl border border-border p-4">
-        <Text className="font-semibold">Periodo de atención</Text>
-        <Text className="mt-1 text-sm text-muted-foreground">
-          {service?.opensAt ? `Apertura: ${new Date(service.opensAt).toLocaleString("es-MX")}` : "Sin fecha de apertura definida"}
-        </Text>
-        <Text className="mt-1 text-sm text-muted-foreground">
-          {service?.closesAt ? `Cierre: ${new Date(service.closesAt).toLocaleString("es-MX")}` : "Sin fecha de cierre definida"}
-        </Text>
-      </View>
+      <SettingsCard title="Información">
+        <SettingsRow icon="ci:calendar-event" title="Periodo de atención" description={period} />
+        <SettingsRow icon="mdi:cash-remove" title="Costo" description={service?.cost || "Gratuito"} isLast />
+      </SettingsCard>
 
-      <View className="flex-row gap-3 rounded-xl p-4">
-        <Monicon name="mdi:cash-remove" size={24} />
-        <View className="flex-1">
-          <Text className="font-semibold">Costo</Text>
-          <Text className="text-muted-foreground">
-            {service?.cost || "Gratuito"}
-          </Text>
-        </View>
-      </View>
-
-      <View className="gap-2">
-        <Text className="text-lg font-semibold">¿Para quién aplica?</Text>
-        <Text className="text-muted-foreground">
+      <SettingsCard title="¿Para quién aplica?">
+        <Text className="text-sm text-foreground" style={styles.cardText}>
           {service?.targetAudience || detail.appliesTo}
         </Text>
-      </View>
+      </SettingsCard>
 
-      <View className="gap-2">
-        <Text className="text-lg font-semibold">Requisitos</Text>
-        {requirements.map((requirement) => (
-          <View
-            key={requirement.id}
-            className="flex-row items-start gap-3 rounded-xl p-3"
-            style={{ boxShadow: '0 0 10px rgba(0, 0, 0, 0.1)' }}
-          >
-            <Monicon name="mdi:check-circle-outline" size={19} />
-            <Text className="flex-1 text-muted-foreground">
-              {requirement.name}
-            </Text>
-          </View>
-        ))}
-      </View>
+      <SettingsCard title={`Requisitos (${requirements.length})`}>
+        <View style={styles.requirements}>
+          {requirements.map((requirement, index) => (
+            <View
+              key={requirement.id}
+              style={[
+                styles.requirement,
+                index < requirements.length - 1 && {
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: palette.border,
+                },
+              ]}
+            >
+              <Monicon name="mdi:check-circle-outline" size={20} color={palette.primary} />
+              <Text className="flex-1 text-sm text-foreground">{requirement.name}</Text>
+            </View>
+          ))}
+        </View>
+      </SettingsCard>
 
       {!isOpen && (
-        <View className="rounded-xl border border-amber-400 bg-amber-50 p-4">
-          <Text className="font-semibold text-amber-900">
+        <View className="rounded-2xl border border-amber-300 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950">
+          <Text className="font-semibold text-amber-900 dark:text-amber-200">
             La convocatoria no está abierta, pero puedes registrar la solicitud.
           </Text>
-          <Text className="mt-1 text-amber-800">
+          <Text className="mt-1 text-sm text-amber-800 dark:text-amber-300">
             {service?.opensAt && new Date(service.opensAt).getTime() > now
-              ? `Quedará en espera para revisarla a partir del ${new Date(service.opensAt).toLocaleDateString("es-MX")}.`
+              ? `Quedará en espera para revisarla a partir del ${formatDate(service.opensAt)}.`
               : "Quedará en espera para revisarla cuando el programa vuelva a abrir."}
           </Text>
         </View>
@@ -266,6 +275,47 @@ export function RequestIntro({
   );
 }
 
+const styles = StyleSheet.create({
+  container: {
+    gap: 16,
+  },
+  card: {
+    width: "100%",
+    borderRadius: 18,
+    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.07)",
+  },
+  hero: {
+    gap: 6,
+    padding: 18,
+  },
+  statusRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  statusDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  cardText: {
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    lineHeight: 20,
+  },
+  requirements: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  requirement: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingVertical: 12,
+  },
+});
+
 type SpecificProps = {
   serviceId: string;
   title: string;
@@ -273,19 +323,25 @@ type SpecificProps = {
   onChange: (values: SpecificRequestData) => void;
 };
 
+/** Campos del formulario particular de un trámite (configurados o predeterminados). */
+export function useSpecificFields(serviceId: string): ServiceFormField[] {
+  const { data: service } = useCatalogService(serviceId);
+  const configuredFields = service?.formConfig?.fields;
+  return configuredFields?.length
+    ? configuredFields
+    : (SPECIFIC_FIELDS[serviceId] ?? fallbackFields);
+}
+
 export function SpecificRequestForm({
   serviceId,
   title,
   values,
   onChange,
 }: SpecificProps) {
-  const { data: service } = useCatalogService(serviceId);
-  const configuredFields = service?.formConfig?.fields;
-  const fields = configuredFields?.length
-    ? configuredFields
-    : (SPECIFIC_FIELDS[serviceId] ?? fallbackFields);
+  const fields = useSpecificFields(serviceId);
   return (
     <DynamicGlobalForm
+      appearance="glass"
       fields={fields}
       values={values}
       onChange={onChange}

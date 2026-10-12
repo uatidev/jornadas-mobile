@@ -7,22 +7,11 @@ import { SettingsGroup } from "@/src/types/gestionar-cuenta";
 
 export const useGestionarCuenta = () => {
   const router = useRouter();
-  const { user, refreshUser, setUser } = useAuth();
+  const { user } = useAuth();
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [showChangeProfilePhotoModal, setShowChangeProfilePhotoModal] = useState(false);
-  const [showUpdateNameModal, setShowUpdateNameModal] = useState(false);
-  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
 
-  const handleChangeProfilePhoto = () => {
-    setShowChangeProfilePhotoModal(true);
-  };
-
-  const handleUpdateName = () => {
-    setShowUpdateNameModal(true);
-  };
-
-  const handleChangePassword = () => {
-    setShowChangePasswordModal(true);
+  const handleEditProfile = () => {
+    router.push("/editar-perfil" as any);
   };
 
   const handleEnable2FA = () => {
@@ -101,15 +90,8 @@ export const useGestionarCuenta = () => {
     return parts.join(" ");
   };
 
-  const handleModalSuccess = async () => {
-    // Refrescar el usuario desde Appwrite para obtener los datos actualizados
-    await refreshUser();
-  };
-
   const settingsGroups: SettingsGroup[] = createSettingsGroups({
-    handleChangeProfilePhoto,
-    handleUpdateName,
-    handleChangePassword,
+    handleEditProfile,
     handleEnable2FA,
     handlePrivacyPolicy,
     handleTermsAndConditions,
@@ -121,17 +103,10 @@ export const useGestionarCuenta = () => {
     user,
     showDeleteDialog,
     setShowDeleteDialog,
-    showChangeProfilePhotoModal,
-    setShowChangeProfilePhotoModal,
-    showUpdateNameModal,
-    setShowUpdateNameModal,
-    showChangePasswordModal,
-    setShowChangePasswordModal,
     settingsGroups,
     getInitials,
     getFullName,
     confirmDeleteAccount,
-    handleModalSuccess,
   };
 };
 

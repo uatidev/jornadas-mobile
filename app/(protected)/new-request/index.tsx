@@ -1,18 +1,23 @@
-import { FormHeader } from "@/src/components/common";
+import { CollapsingHeaderScrollView } from "@/src/components/common/CollapsingHeader";
+import { GlassIconButton } from "@/src/components/common/GlassIconButton";
 import {
   DynamicGlobalForm,
   INEAutoFill,
   isDynamicFormComplete,
   isSpecificFormComplete,
   RequestIntro,
+  RequestReview,
   RequestSuccess,
   SpecificRequestData,
   SpecificRequestForm,
+  useSpecificFields,
 } from "@/src/components/modules/new-request";
-import { Button } from "@/src/components/ui/button";
+import { THEME } from "@/src/components/ui/lib/theme";
+import { Progress } from "@/src/components/ui/progress";
 import { Text } from "@/src/components/ui/text";
-import { useCatalogService, useGlobalForm } from "@/src/hooks/useCatalog";
+import { useActiveEvents, useCatalogService, useGlobalForm } from "@/src/hooks/useCatalog";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { useTheme } from "@/src/providers/ThemeProvider";
 import type { RequestReceipt } from "@/src/services/identityApi";
 import { identityApi } from "@/src/services/identityApi";
 import { useQueryClient } from "@tanstack/react-query";
@@ -23,7 +28,6 @@ import {
   InteractionManager,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   View,
 } from "react-native";
@@ -37,6 +41,8 @@ export default function NewRequest() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
+  const { colorScheme } = useTheme();
+  const palette = THEME[colorScheme];
   const params = useLocalSearchParams<{
     serviceId?: string;
     title?: string;
@@ -76,9 +82,12 @@ export default function NewRequest() {
   const canSetPriority = forcedInstitutionalPriority || user?.role === "enlace";
   const selectedPriority = forcedInstitutionalPriority || priorityRequested;
   const usesGlobalForm = service?.usesGlobalForm ?? true;
-  const specificFields = service?.formConfig?.fields || [];
+  const specificFields = useSpecificFields(serviceId);
+  const { data: activeEvents } = useActiveEvents();
+  const event = activeEvents?.find((item) => item.id === eventId);
+  const eventName = event ? `${event.name} · ${event.municipality}` : undefined;
   const globalComplete = isDynamicFormComplete(globalFields, globalData);
-  const specificComplete = specificFields.length
+  const specificComplete = service?.formConfig?.fields?.length
     ? specificFields
       .filter((field) => field.required !== false)
       .every((field) => Boolean(specificData[field.key]?.trim()))
@@ -87,28 +96,23 @@ export default function NewRequest() {
     () => ({
       intro: [
         title,
-        "Conoce los requisitos antes de iniciar.",
-        "mdi:information-outline",
+        "Conoce los requisitos antes de iniciar."
       ],
       global: [
         "Formulario general",
-        "Datos requeridos en todos los trámites.",
-        "mdi:account-edit",
+        "Datos requeridos en todos los trámites."
       ],
       specific: [
         `Datos de ${title}`,
-        "Información particular del trámite.",
-        "mdi:file-document-edit",
+        "Información particular del trámite."
       ],
       review: [
         "Confirmación",
-        "Revisa la información antes de enviarla.",
-        "mdi:check-circle",
+        "Revisa la información antes de enviarla."
       ],
       success: [
         "Solicitud enviada",
-        "Tu solicitud quedó registrada.",
-        "mdi:check-circle",
+        "Tu solicitud quedó registrada."
       ],
     }),
     [title],
@@ -209,28 +213,47 @@ export default function NewRequest() {
       className="flex-1"
     >
       <View className="flex-1 bg-background">
-        <FormHeader
-          step={step}
-          totalSteps={4}
-          title={copy[stage][0]}
-          description={copy[stage][1]}
-          icon={copy[stage][2]}
-          directionName="Nueva solicitud"
-          backRoute="/home"
-        />
-        <ScrollView
+        <CollapsingHeaderScrollView
           key={stage}
           ref={scrollRef}
+          title={copy[stage][0]}
+          subtitle={copy[stage][1]}
+          largeTitleAlign="center"
+          headerLeft={
+            <GlassIconButton
+              icon="ic:baseline-arrow-back-ios-new"
+              accessibilityLabel="Salir de la solicitud"
+              onPress={() => router.back()}
+              size={40}
+            />
+          }
           scrollsToTop
+          // Sin esto, con el teclado abierto el primer toque solo lo cierra y
+          // hay que tocar dos veces los botones.
+          keyboardShouldPersistTaps="handled"
           onContentSizeChange={() => {
             if (!pendingScrollReset.current) return;
             scrollRef.current?.scrollTo({ y: 0, animated: false });
             pendingScrollReset.current = false;
           }}
-          className="flex-1 px-6"
-          contentContainerStyle={{ paddingBottom: insets.bottom + 104 }}
+          contentContainerStyle={{
+            paddingHorizontal: stage === "success" ? 28 : 16,
+            paddingBottom: insets.bottom + 24,
+          }}
         >
           <View className="mx-auto w-full max-w-[672px] gap-6 py-2">
+            {stage !== "success" ? (
+              <View className="gap-2">
+                <Text className="text-center text-sm text-muted-foreground">
+                  Paso {step + 1} de 4
+                </Text>
+                <Progress
+                  value={((step + 1) / 4) * 100}
+                  className="bg-muted"
+                  gradientColors={[palette.primary, palette.primary]}
+                />
+              </View>
+            ) : null}
             {stage === "success" ? (
               <RequestSuccess
                 title={title}
@@ -266,6 +289,7 @@ export default function NewRequest() {
                     />
                   ) : null}
                   <DynamicGlobalForm
+                    appearance="glass"
                     fields={globalFields}
                     values={globalData}
                     onChange={setGlobalData}
@@ -280,83 +304,63 @@ export default function NewRequest() {
                 onChange={setSpecificData}
               />
             ) : (
-              <View className="gap-5 rounded-2xl border border-border bg-card p-5">
-                <Text className="text-xl font-bold">
-                  Resumen de la solicitud
-                </Text>
-                <Text className="font-semibold">Datos generales</Text>
-                {Object.entries(globalData).map(([key, value]) => (
-                  <Text key={key} className="text-muted-foreground">
-                    • {value}
-                  </Text>
-                ))}
-                <Text className="mt-2 font-semibold">Datos del trámite</Text>
-                {Object.entries(specificData).map(([key, value]) => (
-                  <Text key={key} className="text-muted-foreground">
-                    • {value}
-                  </Text>
-                ))}
-                {canSetPriority ? (
-                  <Pressable
-                    disabled={forcedInstitutionalPriority}
-                    onPress={() => setPriorityRequested((value) => !value)}
-                    className={`mt-3 flex-row items-center gap-3 rounded-xl border p-4 ${selectedPriority ? "border-primary bg-primary/10" : "border-border"}`}
-                  >
-                    <View className={`h-5 w-5 items-center justify-center rounded border ${selectedPriority ? "border-primary bg-primary" : "border-muted-foreground"}`}>
-                      {selectedPriority ? <Text className="text-xs font-bold text-primary-foreground">✓</Text> : null}
-                    </View>
-                    <View className="flex-1">
-                      <Text className="font-semibold">Solicitud prioritaria</Text>
-                      <Text className="mt-1 text-xs text-muted-foreground">
-                        {forcedInstitutionalPriority
-                          ? "Las solicitudes registradas por Secretaría se envían automáticamente como prioritarias."
-                          : "Márcala cuando requiera atención prioritaria por parte de la unidad responsable."}
-                      </Text>
-                    </View>
-                  </Pressable>
-                ) : null}
-                {error ? (
-                  <Text className="text-destructive">{error}</Text>
-                ) : null}
+              <RequestReview
+                serviceTitle={title}
+                eventName={eventName}
+                globalFields={globalFields}
+                globalData={globalData}
+                specificFields={specificFields}
+                specificData={specificData}
+                onEditGlobal={usesGlobalForm ? () => setStage("global") : undefined}
+                onEditSpecific={() => setStage("specific")}
+                canSetPriority={canSetPriority}
+                forcedPriority={forcedInstitutionalPriority}
+                priority={selectedPriority}
+                onPriorityChange={setPriorityRequested}
+                error={error}
+              />
+            )}
+
+            {/* Navegación al final del contenido (no fija): X / < para salir o
+                regresar y > para avanzar o enviar. */}
+            {stage !== "success" && (
+              <View className="flex-row items-center justify-center gap-6 pt-2">
+                <GlassIconButton
+                  icon={stage === "intro" ? "mdi:close" : "ci:chevron-left"}
+                  accessibilityLabel={stage === "intro" ? "Cancelar" : "Anterior"}
+                  onPress={back}
+                  disabled={isSubmitting}
+                />
+                {stage === "review" ? (
+                  <GlassIconButton
+                    variant="primary"
+                    icon="mdi:check"
+                    accessibilityLabel="Enviar solicitud"
+                    onPress={submit}
+                    loading={isSubmitting}
+                  />
+                ) : (
+                  <GlassIconButton
+                    variant="primary"
+                    icon="ci:chevron-right"
+                    accessibilityLabel={
+                      stage === "intro"
+                        ? active
+                          ? "Iniciar trámite"
+                          : "Registrar con prioridad"
+                        : "Siguiente"
+                    }
+                    onPress={next}
+                    disabled={
+                      (stage === "global" && !globalComplete) ||
+                      (stage === "specific" && !specificComplete)
+                    }
+                  />
+                )}
               </View>
             )}
           </View>
-        </ScrollView>
-        {stage !== "success" && (
-          <View
-            className="absolute bottom-0 left-0 right-0 flex-row gap-4 border-t border-border bg-background px-6 pt-4"
-            style={{ paddingBottom: insets.bottom + 8 }}
-          >
-            <Button variant="outline" onPress={back} className="flex-1">
-              <Text>{stage === "intro" ? "Regresar" : "Anterior"}</Text>
-            </Button>
-            {stage === "review" ? (
-              <Button
-                onPress={submit}
-                disabled={isSubmitting}
-                className="flex-1"
-              >
-                {isSubmitting ? (
-                  <ActivityIndicator size="small" color="white" />
-                ) : null}
-                <Text>{isSubmitting ? "Enviando..." : "Enviar solicitud"}</Text>
-              </Button>
-            ) : (
-              <Button
-                onPress={next}
-                disabled={
-                  (stage === "global" && !globalComplete) ||
-                  (stage === "specific" && !specificComplete)
-                }
-                className="flex-1"
-              >
-                <Text>
-                  {stage === "intro" ? (active ? "Iniciar trámite" : "Registrar con prioridad") : "Siguiente"}
-                </Text>
-              </Button>
-            )}
-          </View>
-        )}
+        </CollapsingHeaderScrollView>
       </View>
     </KeyboardAvoidingView>
   );

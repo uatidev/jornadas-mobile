@@ -11,6 +11,11 @@ module.exports = {
   presets: [require("nativewind/preset")],
   theme: {
     extend: {
+      fontFamily: {
+        // Poppins va integrada en el binario (app.json → expo-font) y en web
+        // se carga desde Google Fonts en global.css.
+        sans: ["Poppins", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",

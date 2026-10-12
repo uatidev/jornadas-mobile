@@ -1,11 +1,8 @@
 import {
-  ChangePasswordModal,
-  ChangeProfilePhotoModal,
   DeleteAccountDialog,
   GestionarCuentaHeader,
   ProfileCard,
   SettingsGroup,
-  UpdateNameModal,
 } from "@/src/components/modules/gestionar-cuenta";
 import { THEME } from "@/src/components/ui/lib/theme";
 import { useGestionarCuenta } from "@/src/hooks/useGestionarCuenta";
@@ -20,17 +17,9 @@ export default function GestionarCuentaScreen() {
     user,
     showDeleteDialog,
     setShowDeleteDialog,
-    showChangeProfilePhotoModal,
-    setShowChangeProfilePhotoModal,
-    showUpdateNameModal,
-    setShowUpdateNameModal,
-    showChangePasswordModal,
-    setShowChangePasswordModal,
     settingsGroups,
     getInitials,
-    getFullName,
     confirmDeleteAccount,
-    handleModalSuccess,
   } = useGestionarCuenta();
 
   const backgroundColor = THEME[colorScheme].background;
@@ -54,7 +43,7 @@ export default function GestionarCuentaScreen() {
           <ProfileCard user={user} getInitials={getInitials} />
         </View>
 
-        <View>
+        <View style={{ gap: 20 }}>
           {settingsGroups.map((group) => (
             <SettingsGroup key={group.id} group={group} />
           ))}
@@ -67,24 +56,8 @@ export default function GestionarCuentaScreen() {
         onConfirm={confirmDeleteAccount}
       />
 
-      <ChangeProfilePhotoModal
-        open={showChangeProfilePhotoModal}
-        onOpenChange={setShowChangeProfilePhotoModal}
-        onSuccess={handleModalSuccess}
-      />
 
-      <UpdateNameModal
-        open={showUpdateNameModal}
-        onOpenChange={setShowUpdateNameModal}
-        currentName={getFullName()}
-        onSuccess={handleModalSuccess}
-      />
 
-      <ChangePasswordModal
-        open={showChangePasswordModal}
-        onOpenChange={setShowChangePasswordModal}
-        onSuccess={handleModalSuccess}
-      />
     </View>
   );
 }

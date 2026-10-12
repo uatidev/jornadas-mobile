@@ -1,8 +1,12 @@
+import { CollapsingHeaderScrollView } from "@/src/components/common/CollapsingHeader";
+import { GlassIconButton } from "@/src/components/common/GlassIconButton";
+import { GlassInput } from "@/src/components/common/GlassInput";
+import { GlassSelect } from "@/src/components/common/GlassSelect";
 import { DynamicGlobalForm, INEAutoFill, isDynamicFormComplete } from "@/src/components/modules/new-request";
 import { Button } from "@/src/components/ui/button";
-import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
 import { useActiveEvents, useGlobalForm } from "@/src/hooks/useCatalog";
+import { useSelectedEventId } from "@/src/hooks/useSelectedEvent";
 import { useAuth } from "@/src/providers/AuthProvider";
 import { adminService } from "@/src/services/admin";
 import { filesService } from "@/src/services/files";
@@ -11,9 +15,9 @@ import type { SecretaryRequest, SecretaryRequestDocument, SecretaryRequestStatus
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
-import { Redirect, usePathname, useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, ScrollView, useWindowDimensions, View } from "react-native";
+import { ActivityIndicator, KeyboardAvoidingView, Linking, Modal, Platform, Pressable, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const STATUS_LABELS: Record<string, string> = {
@@ -31,10 +35,6 @@ const SOURCE_LABELS = {
   oficina_gubernamental: "Oficina gubernamental",
   otra: "Otra procedencia",
 };
-
-function Choice({ active, label, onPress, fullWidth = false }: { active: boolean; label: string; onPress: () => void; fullWidth?: boolean }) {
-  return <Pressable onPress={onPress} className={`${fullWidth ? "w-full" : ""} rounded-xl border px-4 py-3 ${active ? "border-primary bg-primary/10" : "border-border bg-background"}`}><Text className={active ? "font-semibold text-primary" : ""}>{label}</Text></Pressable>;
-}
 
 function RequestCard({ item, canClose }: { item: SecretaryRequest; canClose: boolean }) {
   const queryClient = useQueryClient();
@@ -65,9 +65,8 @@ function RequestCard({ item, canClose }: { item: SecretaryRequest; canClose: boo
       {item.documents.map((document) => <Button key={document.fileId} size="sm" variant="outline" className="w-full" onPress={() => Platform.OS === "web" ? filesService.openAuthenticatedFile(document.fileId, document.type) : Linking.openURL(document.url || filesService.getImageUrl(document.fileId, "request_documents"))}><Text numberOfLines={1}>Ver {document.name}</Text></Button>)}
     </View>
     {user?.role === "enlace" && item.status === "pendiente_canalizacion" ? <View className="gap-3 border-t border-border pt-4">
-      <Text className="font-semibold">Área responsable</Text>
-      <View className="gap-2">{units.data?.map((unit) => <Choice key={unit.id} fullWidth active={unitId === unit.id} label={unit.name} onPress={() => setUnitId(unit.id)} />)}</View>
-      <Input value={comment} onChangeText={setComment} placeholder="Criterio de canalización" multiline className="min-h-20" />
+      <GlassSelect label="Área responsable" required placeholder={units.isLoading ? "Cargando áreas..." : "Selecciona el área"} disabled={units.isLoading} options={(units.data || []).map((unit) => ({ value: unit.id, label: unit.name }))} value={unitId} onChange={setUnitId} />
+      <GlassInput label="Criterio de canalización" type="textarea" value={comment} onChangeText={setComment} />
       <Button disabled={!unitId || update.isPending} onPress={() => update.mutate({ unitId, comment })}><Text>{update.isPending ? "Canalizando..." : "Confirmar canalización"}</Text></Button>
     </View> : null}
     {canWork && item.status !== "atendida" && item.status !== "cancelada" && item.status !== "pendiente_canalizacion" ? <View className={`${compact ? "gap-2" : "flex-row flex-wrap gap-2"} border-t border-border pt-4`}>
@@ -81,13 +80,11 @@ function RequestCard({ item, canClose }: { item: SecretaryRequest; canClose: boo
 
 export default function SecretaryRequestsScreen() {
   const router = useRouter();
-  const pathname = usePathname();
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const compact = width < 640;
-  const renderedInsideSecretaryTab = pathname.includes("/secretaria");
   const globalForm = useGlobalForm();
   const activeEvents = useActiveEvents();
   const canCreate = user?.role === "secretaria" || user?.role === "capturista_secretaria" || user?.role === "enlace" || user?.role === "super_admin";
@@ -100,7 +97,6 @@ export default function SecretaryRequestsScreen() {
   );
   const activeSection = compact && canCreate ? "new" : section;
   const [applicantData, setApplicantData] = useState<Record<string, string>>({});
-  const [selectedEventId, setSelectedEventId] = useState("");
   const [subject, setSubject] = useState("");
   const [source, setSource] = useState<"gobernador" | "oficina_gubernamental" | "otra">("gobernador");
   const [officeNumber, setOfficeNumber] = useState("");
@@ -115,7 +111,11 @@ export default function SecretaryRequestsScreen() {
   const [receiptVisible, setReceiptVisible] = useState(false);
   const [formResetKey, setFormResetKey] = useState(0);
 
-  const effectiveEventId = selectedEventId || activeEvents.data?.[0]?.id || "";
+  // La solicitud se registra en el evento elegido en el selector de ubicación
+  // de Inicio (si no hay uno, en el primer evento activo).
+  const homeEventId = useSelectedEventId();
+  const homeEvent = activeEvents.data?.find((event) => event.id === homeEventId);
+  const effectiveEventId = homeEvent?.id || activeEvents.data?.[0]?.id || "";
 
   const globalFields = globalForm.data?.fields || [];
   const hasGlobalDocumentField = globalFields.some((field) => field.type === "file");
@@ -205,25 +205,38 @@ export default function SecretaryRequestsScreen() {
   const valid = effectiveEventId && subject.trim() && isDynamicFormComplete(globalFields, applicantData);
 
   return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} className="flex-1 bg-background">
-    <View className="border-b border-border px-4 pb-4" style={{ paddingTop: Math.max(insets.top, 12) }}><View className={`mx-auto w-full max-w-4xl ${compact ? "gap-3" : "flex-row items-center justify-between"}`}><View className="min-w-0 flex-1"><Text className={`${compact ? "text-xl" : "text-2xl"} font-bold`}>Atención de Secretaría</Text><Text className="mt-1 text-sm text-muted-foreground">Oficios y solicitudes institucionales prioritarias</Text></View>{!renderedInsideSecretaryTab ? <Button className={compact ? "w-full" : ""} variant="outline" onPress={() => router.back()}><Text>Regresar</Text></Button> : null}</View></View>
-    {canCreate && !compact ? <View className="flex-row border-b border-border px-6"><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "new" }} onPress={() => setSection("new")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "new" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Nueva solicitud</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "queue" }} onPress={() => setSection("queue")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "queue" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Bandeja administrativa</Text></Pressable></View> : null}
-    <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: compact ? 16 : 24, paddingBottom: Math.max(insets.bottom + 32, 64) }}><View className="mx-auto w-full max-w-4xl gap-5">
+    <CollapsingHeaderScrollView
+      title="Atención de Secretaría"
+      subtitle="Oficios y solicitudes institucionales prioritarias"
+      largeTitleAlign="center"
+      headerLeft={<GlassIconButton icon="ic:baseline-arrow-back-ios-new" accessibilityLabel="Regresar" onPress={() => router.back()} size={40} />}
+      keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ paddingHorizontal: compact ? 20 : 24, paddingBottom: Math.max(insets.bottom + 32, 64) }}
+    ><View className="mx-auto w-full max-w-4xl gap-5">
+    {canCreate && !compact ? <View className="flex-row border-b border-border"><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "new" }} onPress={() => setSection("new")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "new" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Nueva solicitud</Text></Pressable><Pressable accessibilityRole="tab" accessibilityState={{ selected: section === "queue" }} onPress={() => setSection("queue")} className={`min-h-12 flex-1 items-center justify-center border-b-2 px-2 py-3 ${section === "queue" ? "border-primary" : "border-transparent"}`}><Text className="text-center text-sm font-semibold">Bandeja administrativa</Text></Pressable></View> : null}
       {activeSection === "new" ? <>
-        <View className="gap-3 rounded-2xl border border-border bg-card p-4">
-          <Text className="text-xl font-bold">Evento de atención *</Text>
-          <Text className="text-sm text-muted-foreground">La solicitud quedará registrada dentro del evento seleccionado.</Text>
-          {activeEvents.isLoading ? <ActivityIndicator color="#981646" /> : activeEvents.data?.length ? <View className="gap-2">{activeEvents.data.map((event) => <Choice key={event.id} fullWidth active={effectiveEventId === event.id} label={`${event.name} · ${event.municipality}`} onPress={() => setSelectedEventId(event.id)} />)}</View> : <Text className="text-sm text-destructive">No hay eventos activos disponibles.</Text>}
-        </View>
+        {!activeEvents.isLoading && !effectiveEventId ? (
+          <Text className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">No hay un evento activo. Elige uno desde Inicio para registrar la solicitud.</Text>
+        ) : null}
         {globalForm.isLoading ? <ActivityIndicator color="#981646" /> : <View className="gap-5">
           {globalForm.data?.enableINEAnalysis ? <INEAutoFill key={`ine-${formResetKey}`} fields={globalForm.data.fields || []} values={applicantData} onChange={setApplicantData} /> : null}
-          <DynamicGlobalForm key={`global-${formResetKey}`} fields={globalForm.data?.fields || []} values={applicantData} onChange={setApplicantData} title="Datos del solicitante" description="Información del formulario general." />
+          <DynamicGlobalForm key={`global-${formResetKey}`} appearance="glass" fields={globalForm.data?.fields || []} values={applicantData} onChange={setApplicantData} title="Datos del solicitante" description="Información del formulario general." />
         </View>}
-        <View className="gap-4 rounded-2xl border border-border bg-card p-4"><Text className="text-xl font-bold">Datos del oficio</Text><Input value={subject} onChangeText={setSubject} placeholder="Asunto o resumen *" multiline className="min-h-24" /><Text className="font-semibold">Procedencia</Text><View className="gap-2">{Object.entries(SOURCE_LABELS).map(([value, label]) => <Choice key={value} fullWidth active={source === value} label={label} onPress={() => setSource(value as typeof source)} />)}</View><Input value={officeNumber} onChangeText={setOfficeNumber} placeholder="Número de oficio (opcional)" /><Input value={officeDate} onChangeText={setOfficeDate} placeholder="Fecha del oficio: AAAA-MM-DD (opcional)" /><Input value={notes} onChangeText={setNotes} placeholder="Observaciones" multiline className="min-h-24" /></View>
+        <View className="gap-4 rounded-2xl border border-border bg-card p-4">
+          <Text className="text-xl font-bold">Datos del oficio</Text>
+          <GlassInput key={`subject-${formResetKey}`} label="Asunto o resumen" type="textarea" required value={subject} onChangeText={setSubject} placeholder="Describe brevemente el asunto" />
+          <GlassSelect label="Procedencia" required options={Object.entries(SOURCE_LABELS).map(([value, label]) => ({ value, label }))} value={source} onChange={(value) => setSource(value as typeof source)} />
+          <GlassInput label="Número de oficio" value={officeNumber} onChangeText={setOfficeNumber} placeholder="Opcional" />
+          <GlassInput label="Fecha del oficio" value={officeDate} onChangeText={setOfficeDate} placeholder="AAAA-MM-DD (opcional)" keyboardType="numbers-and-punctuation" />
+          <GlassInput label="Observaciones" type="textarea" value={notes} onChangeText={setNotes} placeholder="Opcional" />
+        </View>
         {!hasGlobalDocumentField ? <View className="gap-4 rounded-2xl border border-border bg-card p-4"><Text className="text-xl font-bold">Documento recibido <Text className="text-base font-normal text-muted-foreground">(opcional)</Text></Text><Text className="text-muted-foreground">Si cuentas con un documento, adjunta fotografías legibles o el PDF original.</Text><View className={compact ? "gap-2" : "flex-row gap-3"}><Button className={compact ? "w-full" : "flex-1"} variant="outline" disabled={uploading} onPress={takePhoto}><Text>Tomar foto</Text></Button><Button className={compact ? "w-full" : "flex-1"} variant="outline" disabled={uploading} onPress={pickDocument}><Text>{uploading ? "Subiendo..." : "Elegir archivo"}</Text></Button></View>{uploadError ? <Text className="text-sm text-destructive">{uploadError}</Text> : null}{documents.map((document) => <View key={document.fileId} className="flex-row items-center justify-between gap-3 rounded-xl bg-muted p-3"><Text className="min-w-0 flex-1" numberOfLines={1}>{document.name}</Text><Pressable onPress={() => setDocuments((current) => current.filter((item) => item.fileId !== document.fileId))}><Text className="text-destructive">Quitar</Text></Pressable></View>)}</View> : null}
-        <View className="gap-4 rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">¿Quién atenderá?</Text><Choice active={route === "secretaria"} label="Atender por Secretaría" onPress={() => setRoute("secretaria")} /><Choice active={route === "canalizacion"} label="Enviar al Enlace de canalización" onPress={() => setRoute("canalizacion")} /><Text className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La solicitud se registrará con prioridad alta y conservará quién realizó la captura.</Text></View>
-        {submit.error ? <Text className="text-destructive">{submit.error.message}</Text> : null}<Button disabled={!valid || submit.isPending || uploading} onPress={() => submit.mutate()}><Text>{submit.isPending ? "Registrando..." : "Registrar solicitud prioritaria"}</Text></Button>
+        <View className="gap-4 rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">¿Quién atenderá?</Text><GlassSelect required options={[{ value: "secretaria", label: "Atender por Secretaría" }, { value: "canalizacion", label: "Enviar al Enlace de canalización" }]} value={route} onChange={(value) => setRoute(value as typeof route)} /><Text className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">La solicitud se registrará con prioridad alta y conservará quién realizó la captura.</Text></View>
+        {submit.error ? <Text className="text-destructive">{submit.error.message}</Text> : null}
+        {/* Guardar: palomita al final del formulario, como en los pasos de nueva solicitud. */}
+        <View className="items-center pt-2"><GlassIconButton variant="primary" icon="mdi:check" accessibilityLabel="Registrar solicitud prioritaria" onPress={() => submit.mutate()} disabled={!valid || uploading} loading={submit.isPending} /></View>
       </> : queue.isLoading ? <ActivityIndicator color="#981646" /> : queue.data?.requests.length ? queue.data.requests.map((item) => <RequestCard key={item.id} item={item} canClose={user?.role === "secretaria" || user?.role === "super_admin"} />) : <Text className="py-16 text-center text-muted-foreground">No hay solicitudes en esta bandeja.</Text>}
-    </View></ScrollView>
+    </View></CollapsingHeaderScrollView>
     <Modal visible={receiptVisible} transparent animationType="fade" onRequestClose={() => setReceiptVisible(false)}>
       <View className="flex-1 items-center justify-center bg-black/60 px-5">
         <View className="w-full max-w-md overflow-hidden rounded-3xl bg-background">

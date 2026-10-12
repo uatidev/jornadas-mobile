@@ -1,46 +1,40 @@
-import { THEME } from "@/src/components/ui/lib/theme";
+import { GlassTabBar } from "@/src/components/common/GlassTabBar";
 import { useAuth } from "@/src/providers/AuthProvider";
-import { useTheme } from "@/src/providers/ThemeProvider";
 import Monicon from "@monicon/native";
-import { Tabs } from "expo-router";
+import { Tabs, useRouter } from "expo-router";
 import { Platform, useWindowDimensions } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export default function TabsLayout() {
   const { user } = useAuth();
-  const { colorScheme } = useTheme();
-  const insets = useSafeAreaInsets();
+  const router = useRouter();
   const { width } = useWindowDimensions();
   const hideTabBar = Platform.OS === "web" && width >= 900;
-  const backgroundColor = THEME[colorScheme].background;
-  const borderColor = THEME[colorScheme].border;
-  const iconColor = THEME[colorScheme].foreground;
-  const activeIconColor = THEME[colorScheme].primary;
-  const canSeeSecretaryTab =
+  // Botón flotante (abre Atención de Secretaría): Secretaría, Enlace de canalización, Representante de la
+  // Titular y Superadministrador. El resto ve solo la barra de pestañas.
+  const canUseQuickAction =
     user?.role === "secretaria" ||
+    user?.role === "enlace" ||
     user?.role === "capturista_secretaria" ||
-    user?.role === "enlace";
+    user?.role === "super_admin";
 
   return (
     <Tabs
       initialRouteName="home/index"
+      tabBar={(props) => (
+        <GlassTabBar
+          {...props}
+          hidden={hideTabBar}
+          actionIcon="ci:file-document"
+          actionAccessibilityLabel="Atención de Secretaría"
+          onActionPress={
+            canUseQuickAction
+              ? () => router.push("/secretary-requests")
+              : undefined
+          }
+        />
+      )}
       screenOptions={{
         headerShown: false,
-        tabBarStyle: {
-          display: hideTabBar ? "none" : "flex",
-          backgroundColor,
-          borderTopColor: borderColor,
-          borderTopWidth: 1,
-          height: 60 + insets.bottom,
-          paddingBottom: Math.max(insets.bottom, 12),
-          paddingTop: 8,
-        },
-        tabBarActiveTintColor: activeIconColor,
-        tabBarInactiveTintColor: iconColor,
-        tabBarLabelStyle: {
-          fontSize: 12,
-          fontWeight: "500",
-        },
       }}
     >
       <Tabs.Screen
@@ -63,20 +57,6 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Monicon
               name="material-symbols:list-alt-check-outline"
-              size={size || 24}
-              color={color}
-            />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="secretaria/index"
-        options={{
-          title: "Secretaría",
-          href: canSeeSecretaryTab ? "/secretaria" : null,
-          tabBarIcon: ({ color, size }) => (
-            <Monicon
-              name="ci:file-document"
               size={size || 24}
               color={color}
             />

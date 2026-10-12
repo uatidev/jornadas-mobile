@@ -4,7 +4,10 @@ import { Text } from "@/src/components/ui/text";
 import type { ServiceFormField } from "@/src/types/catalog";
 import { processINE } from "@/src/utils/functions";
 import { useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { THEME } from "@/src/components/ui/lib/theme";
+import { useTheme } from "@/src/providers/ThemeProvider";
+import Monicon from "@monicon/native";
+import { ActivityIndicator, StyleSheet, View } from "react-native";
 
 const normalize = (value: string) =>
   value
@@ -22,6 +25,8 @@ export function INEAutoFill({
   values: Record<string, string>;
   onChange: (values: Record<string, string>) => void;
 }) {
+  const { colorScheme } = useTheme();
+  const palette = THEME[colorScheme];
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
@@ -93,13 +98,18 @@ export function INEAutoFill({
   };
 
   return (
-    <View className="gap-3 rounded-2xl border border-primary/30 bg-primary/5 p-5">
-      <View>
-        <Text className="text-lg font-bold">Completar datos con la INE</Text>
-        <Text className="mt-1 text-sm text-muted-foreground">
-          Escanea la parte frontal para intentar obtener nombre, apellidos, CURP
-          y domicilio. Después podrás corregir cualquier dato.
-        </Text>
+    <View className="bg-card dark:border dark:border-border" style={styles.card}>
+      <View style={styles.header}>
+        <View className="items-center justify-center rounded-full bg-primary/10" style={styles.iconCircle}>
+          <Monicon name="mdi:card-account-details" size={22} color={palette.primary} />
+        </View>
+        <View style={styles.texts}>
+          <Text className="font-bold">Completar con la INE</Text>
+          <Text className="text-xs text-muted-foreground">
+            Escanea el frente para llenar nombre, apellidos, CURP y domicilio.
+            Después podrás corregir cualquier dato.
+          </Text>
+        </View>
       </View>
       <INEScannerCamera
         onScan={handleScan}
@@ -117,7 +127,9 @@ export function INEAutoFill({
       {message ? (
         <Text
           className={
-            success ? "text-sm text-emerald-700" : "text-sm text-destructive"
+            success
+              ? "text-sm text-emerald-700 dark:text-emerald-400"
+              : "text-sm text-destructive"
           }
         >
           {message}
@@ -126,3 +138,25 @@ export function INEAutoFill({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  card: {
+    gap: 14,
+    borderRadius: 18,
+    padding: 16,
+    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.07)",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 14,
+  },
+  iconCircle: {
+    width: 42,
+    height: 42,
+  },
+  texts: {
+    flex: 1,
+    gap: 4,
+  },
+});

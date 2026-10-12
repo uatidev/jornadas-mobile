@@ -225,6 +225,11 @@ module.exports = {
     "width": 16,
     "height": 16
   },
+  "mdi:check": {
+    "svg": "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" ><path fill=\"currentColor\" d=\"M21 7L9 19l-5.5-5.5l1.41-1.41L9 16.17L19.59 5.59z\"/></svg>",
+    "width": 16,
+    "height": 16
+  },
   "mdi:check-circle": {
     "svg": "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" ><path fill=\"currentColor\" d=\"M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2m-2 15l-5-5l1.41-1.41L10 14.17l7.59-7.59L19 8z\"/></svg>",
     "width": 16,
@@ -297,6 +302,11 @@ module.exports = {
   },
   "mdi:map-marker-star": {
     "svg": "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" ><path fill=\"currentColor\" d=\"M12 2C8.1 2 5 5.1 5 9c0 5.2 7 13 7 13s7-7.8 7-13c0-3.9-3.1-7-7-7m2.5 11L12 11.5L9.5 13l.7-2.8L8 8.3l2.9-.2L12 5.4L13.1 8l2.9.3l-2.2 1.9z\"/></svg>",
+    "width": 16,
+    "height": 16
+  },
+  "mdi:plus": {
+    "svg": "<svg viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" ><path fill=\"currentColor\" d=\"M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6z\"/></svg>",
     "width": 16,
     "height": 16
   },

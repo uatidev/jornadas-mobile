@@ -1,13 +1,19 @@
+import { GLASS_FIELD_COLORS, GLASS_FIELD_RADIUS, GlassFieldFrame } from "@/src/components/common/GlassField";
+import { GlassInput, type GlassInputType } from "@/src/components/common/GlassInput";
+import { GlassSelect } from "@/src/components/common/GlassSelect";
 import { Input } from "@/src/components/ui/input";
 import { Text } from "@/src/components/ui/text";
 import type { ServiceFormField } from "@/src/types/catalog";
 import { TABASCO_MUNICIPALITIES } from "@/src/constants/tabasco";
-import { Linking, Platform, Pressable, View } from "react-native";
+import { Linking, Platform, Pressable, StyleSheet, View } from "react-native";
 import { useState } from "react";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker from "expo-image-picker";
 import { filesService } from "@/src/services/files";
 import { Button } from "@/src/components/ui/button";
+import { THEME } from "@/src/components/ui/lib/theme";
+import { useTheme } from "@/src/providers/ThemeProvider";
+import Monicon from "@monicon/native";
 
 type Props = {
   fields: ServiceFormField[];
@@ -15,7 +21,36 @@ type Props = {
   onChange: (values: Record<string, string>) => void;
   title?: string;
   description?: string;
+  /** "glass": campos con GlassInput / GlassSelect (los de archivo no cambian). */
+  appearance?: "default" | "glass";
 };
+
+const GLASS_INPUT_TYPE: Partial<Record<NonNullable<ServiceFormField["type"]>, GlassInputType>> = {
+  email: "email",
+  tel: "tel",
+  number: "number",
+  textarea: "textarea",
+};
+
+/**
+ * Tipo de GlassInput para un campo. Además del tipo configurado, reconoce
+ * correo y teléfono por su nombre (algunos formularios los guardan como texto).
+ */
+const glassInputTypeFor = (field: ServiceFormField): GlassInputType => {
+  const configured = field.type ? GLASS_INPUT_TYPE[field.type] : undefined;
+  if (configured) return configured;
+  const identity = `${field.key} ${field.label}`
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
+  if (/correo|e-?mail/.test(identity)) return "email";
+  if (/telefono|celular|whatsapp/.test(identity)) return "tel";
+  return "text";
+};
+
+/** Dígitos tecleados → "AAAA-MM-DD" (parcial mientras se escribe). */
+const toIsoDate = (digits: string) =>
+  [digits.slice(0, 4), digits.slice(4, 6), digits.slice(6, 8)].filter(Boolean).join("-");
 
 const selectedValues = (value?: string) =>
   value
@@ -48,7 +83,12 @@ export function DynamicGlobalForm({
   onChange,
   title = "Datos generales",
   description = "Esta información se solicita para todos los trámites.",
+  appearance = "default",
 }: Props) {
+  const { colorScheme } = useTheme();
+  const palette = THEME[colorScheme];
+  const glassColors = GLASS_FIELD_COLORS[colorScheme];
+  const isGlass = appearance === "glass";
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [uploadErrors, setUploadErrors] = useState<Record<string, string>>({});
   const setValue = (key: string, value: string) =>
@@ -160,10 +200,13 @@ export function DynamicGlobalForm({
   };
 
   return (
-    <View className="gap-5 rounded-2xl border border-border bg-card p-5">
+    <View
+      className={isGlass ? "bg-card dark:border dark:border-border" : "gap-5 rounded-2xl border border-border bg-card p-5"}
+      style={isGlass ? styles.glassCard : undefined}
+    >
       <View>
         <Text className="text-xl font-bold">{title}</Text>
-        <Text className="mt-1 text-muted-foreground">{description}</Text>
+        <Text className="mt-1 text-sm text-muted-foreground">{description}</Text>
       </View>
       {fields.map((field) => {
         const value = values[field.key] || "";
@@ -175,6 +218,155 @@ export function DynamicGlobalForm({
         const selected = selectedValues(value);
         const isChoice =
           field.type === "select" || field.type === "multiselect";
+        const required = field.required !== false;
+
+        if (isGlass && field.type === "file") {
+          const uploading = uploadingKey === field.key;
+          const full = attachedDocuments.length >= 5;
+          return (
+            <GlassFieldFrame
+              key={field.key}
+              label={field.label}
+              required={required}
+              message={uploadErrors[field.key] || undefined}
+              helperText={
+                field.fileType === "document"
+                  ? `Hasta 5 archivos (${attachedDocuments.length}/5). PDF, Word o Excel; máximo 15 MB cada uno.`
+                  : `Hasta 5 fotografías (${attachedDocuments.length}/5). Máximo 15 MB cada una.`
+              }
+            >
+              <View
+                style={[
+                  styles.dropZone,
+                  { backgroundColor: glassColors.background, borderColor: glassColors.border },
+                ]}
+              >
+                <View style={styles.dropZoneButtons}>
+                  {field.fileType !== "document" ? (
+                    <Button className="flex-1" variant="outline" disabled={uploading || full} onPress={() => pickImage(field)}>
+                      <Text numberOfLines={1}>
+                        {uploading
+                          ? "Subiendo..."
+                          : Platform.OS === "web"
+                            ? attachedDocuments.length ? "Otra imagen" : "Elegir imagen"
+                            : attachedDocuments.length ? "Otra foto" : "Tomar foto"}
+                      </Text>
+                    </Button>
+                  ) : null}
+                  {field.fileType !== "image" ? (
+                    <Button className="flex-1" variant="outline" disabled={uploading || full} onPress={() => pickDocument(field)}>
+                      <Text numberOfLines={1}>{uploading ? "Subiendo..." : attachedDocuments.length ? "Agregar archivos" : "Elegir archivos"}</Text>
+                    </Button>
+                  ) : null}
+                </View>
+                {attachedDocuments.map((document) => (
+                  <View key={document.fileId} style={styles.attachment}>
+                    <Monicon name="ci:file-document" size={18} color={palette.primary} />
+                    <Text className="flex-1 text-sm" numberOfLines={1}>{document.name}</Text>
+                    <Pressable
+                      hitSlop={8}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Quitar ${document.name}`}
+                      onPress={() => {
+                        const remaining = attachedDocuments.filter((item) => item.fileId !== document.fileId);
+                        setValue(field.key, remaining.length ? JSON.stringify(remaining) : "");
+                      }}
+                    >
+                      <Monicon name="mdi:close" size={18} color={palette.mutedForeground} />
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
+            </GlassFieldFrame>
+          );
+        }
+
+        if (isGlass && field.type === "boolean") {
+          return (
+            <GlassFieldFrame key={field.key} label={field.label} required={required}>
+              <View style={styles.segmented}>
+                {["Sí", "No"].map((option) => {
+                  const active = value === option;
+                  return (
+                    <Pressable
+                      key={option}
+                      onPress={() => setValue(field.key, option)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: active }}
+                      style={[
+                        styles.segment,
+                        {
+                          backgroundColor: active ? glassColors.primary : glassColors.background,
+                          borderColor: active ? glassColors.primary : glassColors.border,
+                        },
+                      ]}
+                    >
+                      <Text className={`font-semibold ${active ? "text-white" : "text-foreground"}`}>{option}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </GlassFieldFrame>
+          );
+        }
+
+        if (isGlass && field.type === "date") {
+          return (
+            <GlassInput
+              key={field.key}
+              label={field.label}
+              required={required}
+              leftIcon="ci:calendar-event"
+              mask="9999-99-99"
+              keyboardType="number-pad"
+              value={value}
+              onChangeText={(digits) => setValue(field.key, toIsoDate(digits))}
+              placeholder={field.placeholder || "AAAA-MM-DD"}
+              helperText="Año, mes y día."
+            />
+          );
+        }
+
+        if (isGlass) {
+          if (field.type === "multiselect") {
+            return (
+              <GlassSelect
+                key={field.key}
+                multiple
+                label={field.label}
+                required={required}
+                options={options}
+                value={selected}
+                onChange={(next) => setValue(field.key, next.join("|"))}
+                placeholder={field.placeholder || "Selecciona una o varias opciones"}
+              />
+            );
+          }
+          if (field.type === "select") {
+            return (
+              <GlassSelect
+                key={field.key}
+                label={field.label}
+                required={required}
+                options={options}
+                value={value}
+                onChange={(next) => setValue(field.key, next)}
+                placeholder={field.placeholder || "Selecciona una opción"}
+              />
+            );
+          }
+          return (
+            <GlassInput
+              key={field.key}
+              label={field.label}
+              required={required}
+              type={glassInputTypeFor(field)}
+              value={value}
+              onChangeText={(next) => setValue(field.key, next)}
+              placeholder={field.placeholder}
+            />
+          );
+        }
 
         return (
           <View key={field.key} className="gap-2">
@@ -310,6 +502,44 @@ export function DynamicGlobalForm({
     </View>
   );
 }
+
+const styles = StyleSheet.create({
+  glassCard: {
+    gap: 20,
+    borderRadius: 18,
+    padding: 18,
+    boxShadow: "0 2px 10px rgba(0, 0, 0, 0.07)",
+  },
+  dropZone: {
+    gap: 10,
+    borderWidth: 1.5,
+    borderStyle: "dashed",
+    borderRadius: GLASS_FIELD_RADIUS,
+    padding: 12,
+  },
+  dropZoneButtons: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  attachment: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    paddingVertical: 4,
+  },
+  segmented: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  segment: {
+    flex: 1,
+    minHeight: 50,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderRadius: GLASS_FIELD_RADIUS,
+  },
+});
 
 export const isDynamicFormComplete = (
   fields: ServiceFormField[],
