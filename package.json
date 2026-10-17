@@ -1,7 +1,7 @@
 {
   "name": "jornadas-de-atencion",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": {
     "appwrite:provision": "node scripts/appwrite/provision.mjs",
     "appwrite:bootstrap-admin": "node scripts/appwrite/bootstrap-admin.mjs",
@@ -94,6 +94,7 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "expo": "~57.0.20",
+    "expo-asset": "~57.0.20",
     "expo-blur": "~57.0.2",
     "expo-camera": "~57.0.4",
     "expo-constants": "~57.0.17",
@@ -108,7 +109,9 @@
     "expo-linear-gradient": "~57.0.1",
     "expo-linking": "~57.0.9",
     "expo-location": "~57.0.16",
+    "expo-print": "~57.0.2",
     "expo-router": "~57.0.19",
+    "expo-sharing": "~57.0.23",
     "expo-splash-screen": "~57.0.8",
     "expo-status-bar": "~57.0.1",
     "expo-symbols": "~57.0.2",

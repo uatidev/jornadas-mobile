@@ -21,13 +21,7 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import Animated, {
-  FadeIn,
-  FadeOut,
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from "react-native-reanimated";
+import { FadeIn, FadeOut } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { FullWindowOverlay as RNFullWindowOverlay } from "react-native-screens";
 
@@ -122,19 +116,6 @@ function SelectContent({
   const { height: windowHeight } = useWindowDimensions();
   const isOpen = !!context.open;
 
-  // Animación manual del sheet: las animaciones `entering` de Reanimated no
-  // son confiables dentro de un Modal en Android y dejan el sheet desplazado.
-  const sheetOffset = useSharedValue(windowHeight);
-  React.useEffect(() => {
-    if (isOpen) {
-      sheetOffset.value = windowHeight;
-      sheetOffset.value = withSpring(0, { damping: 22, stiffness: 220 });
-    }
-  }, [isOpen, windowHeight, sheetOffset]);
-  const sheetStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: sheetOffset.value }],
-  }));
-
   const handleClose = () => {
     context.onOpenChange?.(false);
   };
@@ -145,7 +126,9 @@ function SelectContent({
       <Modal
         visible={isOpen}
         transparent
-        animationType="fade"
+        // Sin animación: el fundido del Modal junto con el resorte del sheet
+        // se veía brusco al abrir el selector de eventos.
+        animationType="none"
         onRequestClose={handleClose}
         statusBarTranslucent
         navigationBarTranslucent
@@ -159,8 +142,8 @@ function SelectContent({
             ]}
           />
         </TouchableWithoutFeedback>
-        <Animated.View
-          style={[sheetStyle, {
+        <View
+          style={{
             position: "absolute",
             bottom: 0,
             left: 0,
@@ -173,7 +156,7 @@ function SelectContent({
             // Alto en números: el porcentaje se calcula distinto en Android.
             maxHeight: windowHeight * 0.8 - safeAreaInsets.top,
             paddingBottom: (insets?.bottom ?? safeAreaInsets.bottom) + 16,
-          }]}
+          }}
         >
           {/* Handle bar */}
           <View
@@ -200,7 +183,7 @@ function SelectContent({
               {children}
             </TextClassContext.Provider>
           </ScrollView>
-        </Animated.View>
+        </View>
       </Modal>
     );
   }

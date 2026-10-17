@@ -50,6 +50,7 @@ export default function ProtectedLayout() {
         <Stack.Screen name="secretary-requests" options={{ headerShown: false }} />
         <Stack.Screen name="solicitud/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="editar-perfil" options={{ headerShown: false }} />
+        <Stack.Screen name="guia-tramite" options={{ headerShown: false }} />
     </Stack>
   );
 }

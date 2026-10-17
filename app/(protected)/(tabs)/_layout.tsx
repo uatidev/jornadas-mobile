@@ -1,5 +1,6 @@
 import { GlassTabBar } from "@/src/components/common/GlassTabBar";
 import { useAuth } from "@/src/providers/AuthProvider";
+import { REPORTS_ROLES } from "@/src/constants/reportes";
 import Monicon from "@monicon/native";
 import { Tabs, useRouter } from "expo-router";
 import { Platform, useWindowDimensions } from "react-native";
@@ -16,6 +17,7 @@ export default function TabsLayout() {
     user?.role === "enlace" ||
     user?.role === "capturista_secretaria" ||
     user?.role === "super_admin";
+  const canViewReports = !!user?.role && REPORTS_ROLES.includes(user.role);
 
   return (
     <Tabs
@@ -60,6 +62,17 @@ export default function TabsLayout() {
               size={size || 24}
               color={color}
             />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="reportes/index"
+        options={{
+          title: "Reportes",
+          // Solo Superadministrador y Secretaría ven la pestaña.
+          href: canViewReports ? undefined : null,
+          tabBarIcon: ({ color, size }) => (
+            <Monicon name="ci:chart-pie" size={size || 24} color={color} />
           ),
         }}
       />

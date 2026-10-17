@@ -16,6 +16,7 @@ declare module "@monicon/icon-loader" {
 	| "ci:map"
 	| "ci:note-edit"
 	| "ci:search-magnifying-glass"
+	| "ci:share-ios-export"
 	| "ci:users-group"
 	| "ic:baseline-arrow-back-ios-new"
 	| "ic:outline-business"

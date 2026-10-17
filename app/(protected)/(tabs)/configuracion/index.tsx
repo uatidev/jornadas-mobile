@@ -13,6 +13,7 @@ import { useAuth } from "@/src/providers/AuthProvider";
 import { useTheme } from "@/src/providers/ThemeProvider";
 import Constants from "expo-constants";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, View } from "react-native";
 import { CollapsingHeaderScrollView } from "@/src/components/common/CollapsingHeader";
@@ -23,6 +24,7 @@ const APP_VERSION =
 
 export default function ConfiguracionScreen() {
   const tabBarSpace = useGlassTabBarSpace();
+  const router = useRouter();
   const { logout } = useAuth();
   const { colorScheme, setThemePreference } = useTheme();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -82,6 +84,16 @@ export default function ConfiguracionScreen() {
                   }}
                 />
               }
+            />
+          </SettingsCard>
+
+          <SettingsCard title="Ayuda">
+            <SettingsRow
+              icon="mdi:information-outline"
+              title="Guía de un trámite de ejemplo"
+              description="Recorre paso a paso cómo se registra una solicitud. No se envía nada."
+              onPress={() => router.push("/guia-tramite")}
+              isLast
             />
           </SettingsCard>
 

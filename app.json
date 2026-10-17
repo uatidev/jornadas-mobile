@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Atención Ciudadana - Secretaría de Turismo y Desarrollo Económico",
+    "name": "Atención Ciudadana - \n Secretaría de Turismo y Desarrollo Económico",
     "slug": "atencion-ciudadana",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./src/assets/images/icon.png",
     "scheme": "jornadas",
@@ -153,7 +153,9 @@
           "cameraPermission": "Esta aplicación necesita acceso a la cámara para tomar fotografías de documentos de identificación y atractivos turísticos."
         }
       ],
-      "expo-image"
+      "expo-image",
+      "expo-sharing",
+      "expo-asset"
     ],
     "experiments": {
       "typedRoutes": true
@@ -167,7 +169,7 @@
       "appwriteProjectId": "6a99a27300154bdcf449",
       "ocrSpaceApiKey": ""
     },
-    "runtimeVersion": "1.0.0",
+    "runtimeVersion": "1.1.0",
     "updates": {
       "url": "https://u.expo.dev/34b4f3c2-551b-413b-95b8-1e4c69845b44"
     }
