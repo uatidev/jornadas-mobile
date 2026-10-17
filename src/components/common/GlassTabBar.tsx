@@ -88,7 +88,9 @@ export function GlassTabBar({
   const focusedIndex = visibleRoutes.findIndex((route) => route.key === focusedKey);
   // La pestaña activa se ensancha para mostrar el título; el resto comparte
   // el espacio sobrante y solo muestra el icono.
-  const innerWidth = Math.max(barWidth - BAR_PADDING * 2, 0);
+  // Fuera de Liquid Glass la superficie lleva un borde que también ocupa ancho.
+  const borderWidth = liquidGlassEnabled ? 0 : StyleSheet.hairlineWidth;
+  const innerWidth = Math.max(barWidth - (BAR_PADDING + borderWidth) * 2, 0);
   const iconTabCount = Math.max(visibleRoutes.length - 1, 0);
   const activeTabWidth =
     iconTabCount === 0
@@ -193,7 +195,9 @@ export function GlassTabBar({
           return (
             <Animated.View
               key={route.key}
-              layout={TAB_LAYOUT_TRANSITION}
+              // En Android la transición de layout deja el contenido con el
+              // ancho anterior; ahí basta con el indicador animado.
+              layout={Platform.OS === "android" ? undefined : TAB_LAYOUT_TRANSITION}
               style={
                 layoutReady
                   ? { width: isFocused ? activeTabWidth : iconTabWidth }
@@ -208,11 +212,15 @@ export function GlassTabBar({
                 onLongPress={onLongPress}
                 style={styles.tab}
               >
-                {options.tabBarIcon?.({ focused: isFocused, color, size: 28 })}
+                <View style={styles.icon}>
+                  {options.tabBarIcon?.({ focused: isFocused, color, size: 28 })}
+                </View>
                 {isFocused ? (
                   <Animated.Text
                     entering={FadeIn.delay(90).duration(160)}
                     numberOfLines={1}
+                    ellipsizeMode="tail"
+                    maxFontSizeMultiplier={1.2}
                     style={[styles.label, { color }]}
                   >
                     {label}
@@ -288,6 +296,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   tab: {
+    width: "100%",
     height: GLASS_TAB_BAR_HEIGHT - BAR_PADDING * 2,
     flexDirection: "row",
     alignItems: "center",
@@ -296,8 +305,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     overflow: "hidden",
   },
+  icon: {
+    flexShrink: 0,
+  },
   label: {
     flexShrink: 1,
+    includeFontPadding: false,
     fontSize: 13,
     fontWeight: "600",
   },

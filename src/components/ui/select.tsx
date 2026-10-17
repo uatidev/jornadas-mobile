@@ -142,8 +142,14 @@ function SelectContent({
             ]}
           />
         </TouchableWithoutFeedback>
+<<<<<<< HEAD
         <View
           style={{
+=======
+        {/* Sin animación propia: solo el fundido del Modal, igual en iOS y Android. */}
+        <View
+          style={[{
+>>>>>>> 5803eec1d0d74c2454ca1be81603e3ad8b95bc04
             position: "absolute",
             bottom: 0,
             left: 0,

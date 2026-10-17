@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "Atención Ciudadana - \n Secretaría de Turismo y Desarrollo Económico",
+    "name": "Atención Ciudadana - \nSecretaría de Turismo y Desarrollo Económico",
     "slug": "atencion-ciudadana",
     "version": "1.1.0",
     "orientation": "portrait",
@@ -169,7 +169,7 @@
       "appwriteProjectId": "6a99a27300154bdcf449",
       "ocrSpaceApiKey": ""
     },
-    "runtimeVersion": "1.1.0",
+    "runtimeVersion": "1.0.0",
     "updates": {
       "url": "https://u.expo.dev/34b4f3c2-551b-413b-95b8-1e4c69845b44"
     }

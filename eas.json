@@ -37,6 +37,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "visittabascoo@gmail.com",
+        "ascAppId": "6756149661",
+        "appleTeamId": "A6BH245A3G"
+      }
+    }
   }
 }
