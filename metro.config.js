@@ -1,6 +1,7 @@
 const { getDefaultConfig } = require("expo/metro-config");
 const { withNativeWind } = require("nativewind/metro");
 const { withMonicon } = require("@monicon/metro");
+const fs = require("fs");
 const path = require("path");
 
 const config = getDefaultConfig(__dirname);
@@ -15,6 +16,9 @@ const nativeWindCache = path.join(
 // Windows puede agotar los manejadores de archivos durante reconstrucciones
 // grandes. Reducir la concurrencia mantiene estable la caché de Metro.
 config.maxWorkers = 2;
+// Metro 0.87 exige que cada watchFolder exista; tras un reinstall la caché de
+// NativeWind todavía no se ha generado.
+fs.mkdirSync(nativeWindCache, { recursive: true });
 config.watchFolders = [...(config.watchFolders || []), nativeWindCache];
 
 // Appwrite depends on an older expo-file-system release, whose peer dependency
@@ -95,6 +99,7 @@ const configWithMonicon = withMonicon(config, {
     "mdi:clipboard-check",
     "mdi:clipboard-text",
     "mdi:close",
+    "mdi:crown",
     "mdi:eye",
     "mdi:eye-off",
     "mdi:factory",
@@ -104,6 +109,8 @@ const configWithMonicon = withMonicon(config, {
     "mdi:loading",
     "mdi:map-marker",
     "mdi:map-marker-star",
+    "mdi:numeric-2-circle",
+    "mdi:numeric-3-circle",
     "mdi:plus",
     "mdi:store",
     "mdi:store-outline",

@@ -67,7 +67,8 @@ export function useGlassTabBarSpace() {
 export function GlassTabBar({
   state,
   descriptors,
-  navigation,
+  emitter,
+  navigateToTab,
   hidden = false,
   actionIcon = "mdi:plus",
   actionAccessibilityLabel = "Acción",
@@ -174,7 +175,8 @@ export function GlassTabBar({
               : (options.title ?? route.name);
 
           const onPress = () => {
-            const event = navigation.emit({
+            // Desde SDK 58 la barra recibe `emitter` y `navigateToTab` en lugar de `navigation`.
+            const event = emitter.emit({
               type: "tabPress",
               target: route.key,
               canPreventDefault: true,
@@ -184,12 +186,12 @@ export function GlassTabBar({
               if (Platform.OS === "ios") {
                 Haptics.selectionAsync();
               }
-              navigation.navigate(route.name, route.params);
+              navigateToTab(route.key);
             }
           };
 
           const onLongPress = () => {
-            navigation.emit({ type: "tabLongPress", target: route.key });
+            emitter.emit({ type: "tabLongPress", target: route.key });
           };
 
           return (

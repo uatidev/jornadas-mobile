@@ -281,7 +281,7 @@ export default function ReportesScreen() {
               title={REPORT_SECTIONS.capturistas.title}
               subtitle={REPORT_SECTIONS.capturistas.subtitle}
             >
-              <StackedBarChart data={report.byCapturista} limit={REPORT_SECTIONS.capturistas.limit} />
+              <StackedBarChart data={report.byCapturista} limit={REPORT_SECTIONS.capturistas.limit} podium />
             </ChartCard>
 
           </>

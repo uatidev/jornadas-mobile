@@ -5,6 +5,11 @@ import Monicon from "@monicon/native";
 import { Tabs, useRouter } from "expo-router";
 import { Platform, useWindowDimensions } from "react-native";
 
+// SDK 58: la pestaña inicial se define aquí, ya no como prop de <Tabs>.
+export const unstable_settings = {
+  anchor: "home/index",
+};
+
 export default function TabsLayout() {
   const { user } = useAuth();
   const router = useRouter();
@@ -21,7 +26,6 @@ export default function TabsLayout() {
 
   return (
     <Tabs
-      initialRouteName="home/index"
       tabBar={(props) => (
         <GlassTabBar
           {...props}
@@ -47,7 +51,7 @@ export default function TabsLayout() {
             <Monicon
               name="material-symbols:home-outline-rounded"
               size={size || 24}
-              color={color}
+              color={color as string}
             />
           ),
         }}
@@ -60,7 +64,7 @@ export default function TabsLayout() {
             <Monicon
               name="material-symbols:list-alt-check-outline"
               size={size || 24}
-              color={color}
+              color={color as string}
             />
           ),
         }}
@@ -72,7 +76,7 @@ export default function TabsLayout() {
           // Solo Superadministrador y Secretaría ven la pestaña.
           href: canViewReports ? undefined : null,
           tabBarIcon: ({ color, size }) => (
-            <Monicon name="ci:chart-pie" size={size || 24} color={color} />
+            <Monicon name="ci:chart-pie" size={size || 24} color={color as string} />
           ),
         }}
       />
@@ -84,7 +88,7 @@ export default function TabsLayout() {
             <Monicon
               name="material-symbols:settings-outline-rounded"
               size={size || 24}
-              color={color}
+              color={color as string}
             />
           ),
         }}
@@ -98,7 +102,7 @@ export default function TabsLayout() {
             <Monicon
               name="ic:outline-business"
               size={size || 24}
-              color={color}
+              color={color as string}
             />
           ),
         }}
@@ -109,7 +113,7 @@ export default function TabsLayout() {
           title: "Desarrollo Turístico",
           href: null,
           tabBarIcon: ({ color, size }) => (
-            <Monicon name="ic:outline-tour" size={size || 24} color={color} />
+            <Monicon name="ic:outline-tour" size={size || 24} color={color as string} />
           ),
         }}
       />
@@ -119,7 +123,7 @@ export default function TabsLayout() {
           title: "Ferias y Festivales",
           href: null,
           tabBarIcon: ({ color, size }) => (
-            <Monicon name="ic:outline-event" size={size || 24} color={color} />
+            <Monicon name="ic:outline-event" size={size || 24} color={color as string} />
           ),
         }}
       />
@@ -132,7 +136,7 @@ export default function TabsLayout() {
             <Monicon
               name="mdi:finance"
               size={size || 24}
-              color={color}
+              color={color as string}
             />
           ),
         }}

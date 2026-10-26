@@ -2,6 +2,7 @@ import { THEME } from "@/src/components/ui/lib/theme";
 import { Text } from "@/src/components/ui/text";
 import type { ReportDatum, SplitDatum } from "@/src/hooks/useReportes";
 import { useTheme } from "@/src/providers/ThemeProvider";
+import Monicon from "@monicon/native";
 import { useState, type ReactNode } from "react";
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from "react-native";
 import Svg, { Circle } from "react-native-svg";
@@ -18,6 +19,15 @@ export const CATEGORICAL = {
 /** Color de la categoría agrupada "Otros". */
 export const OTHER_COLOR = { light: "#a1a1aa", dark: "#52525b" };
 export const MAX_SLICES = CATEGORICAL.light.length;
+/**
+ * Distintivos del podio: corona de oro al 1.º, moneda de plata al 2.º y de
+ * bronce al 3.º. Tonos legibles en fondo claro y oscuro.
+ */
+const PODIUM = [
+  { icon: "mdi:crown", color: "#E0A800", label: "Primer lugar" },
+  { icon: "mdi:numeric-2-circle", color: "#9CA3AF", label: "Segundo lugar" },
+  { icon: "mdi:numeric-3-circle", color: "#B0703C", label: "Tercer lugar" },
+] as const;
 
 /**
  * Series fijas del desglose por tipo de solicitud: el color sigue a la serie, no
@@ -225,10 +235,12 @@ export function HorizontalBarChart({ data, limit = 8 }: { data: ReportDatum[]; l
  * Barras horizontales apiladas Trámites + Secretaría. Al tocar una fila se
  * muestra el desglose de ambas series.
  */
-export function StackedBarChart({ data, limit = 8, showLegend = true }: {
+export function StackedBarChart({ data, limit = 8, showLegend = true, podium = false }: {
   data: SplitDatum[];
   limit?: number;
   showLegend?: boolean;
+  /** Marca los tres primeros lugares; los empates comparten distintivo. */
+  podium?: boolean;
 }) {
   const colors = useChartColors();
   const [selected, setSelected] = useState<string | null>(null);
@@ -236,6 +248,8 @@ export function StackedBarChart({ data, limit = 8, showLegend = true }: {
   const max = Math.max(...items.map((item) => item.value), 0);
   if (!max) return <EmptyChart />;
   const series = SPLIT_SERIES.filter((serie) => items.some((item) => item[serie.key] > 0));
+  // Valores distintos de mayor a menor: la posición de cada valor es su lugar.
+  const podiumValues = [...new Set(items.map((item) => item.value))].sort((a, b) => b - a);
 
   return (
     <View className="gap-3">
@@ -249,15 +263,20 @@ export function StackedBarChart({ data, limit = 8, showLegend = true }: {
           ))}
         </View>
       ) : null}
-      {items.map((item) => (
+      {items.map((item) => {
+        const badge = podium ? PODIUM[podiumValues.indexOf(item.value)] : undefined;
+        return (
         <Pressable
           key={item.key}
           accessibilityRole="button"
-          accessibilityLabel={`${item.label}: ${item.value}. Trámites ${item.regular}, Atención de Secretaría ${item.secretary}`}
+          accessibilityLabel={`${badge ? `${badge.label}. ` : ""}${item.label}: ${item.value}. Trámites ${item.regular}, Atención de Secretaría ${item.secretary}`}
           onPress={() => setSelected(selected === item.key ? null : item.key)}
         >
           <View className="mb-1 flex-row items-end gap-2">
-            <Text numberOfLines={2} className="flex-1 text-xs text-muted-foreground">{item.label}</Text>
+            {badge ? <Monicon name={badge.icon} size={16} color={badge.color} /> : null}
+            <Text numberOfLines={2} className={`flex-1 text-xs ${badge ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+              {item.label}
+            </Text>
             <Text className="text-sm font-semibold text-foreground">{item.value}</Text>
           </View>
           <View style={{ height: 10, borderRadius: 4, backgroundColor: colors.track }}>
@@ -279,7 +298,8 @@ export function StackedBarChart({ data, limit = 8, showLegend = true }: {
             </Text>
           ) : null}
         </Pressable>
-      ))}
+        );
+      })}
       {data.length > limit ? (
         <Text className="text-xs text-muted-foreground">Mostrando los {limit} principales de {data.length}.</Text>
       ) : null}
