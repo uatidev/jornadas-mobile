@@ -35,18 +35,14 @@ export interface ReportEvent extends AttentionEvent {
 export const REPORT_STATUS_LABELS: Record<string, string> = {
   enviada: "Nueva",
   en_espera_apertura: "En espera de apertura",
-  recibida: "Recibida",
   en_revision: "En seguimiento",
-  en_atencion: "En atención",
   requiere_informacion: "Requiere información",
+  reasignacion_solicitada: "Reasignación solicitada",
   pendiente_canalizacion: "Pendiente de canalización",
   canalizada: "Canalizada",
-  atendida: "Atendida",
-  aprobada: "Aprobada",
   rechazada: "No procedió",
   cancelada: "No continuó",
   concluida: "Concluida",
-  borrador: "Borrador",
 };
 
 const statusText = (status: string) =>
@@ -130,9 +126,7 @@ export function useReportes(eventId: string, kind: ReportKind) {
       eventId: request.eventId,
       capturedById: request.capturedByUserId,
       capturedByName: request.capturedByName || staffNames[request.capturedByUserId] || "No identificado",
-      // Una Atención de Secretaría nace como "recibida", que equivale al "enviada"
-      // (Nueva) de un trámite; en los trámites "recibida" es un paso posterior.
-      status: request.status === "recibida" ? "enviada" : String(request.status),
+      status: String(request.status),
       priority: Boolean(request.highPriority),
     })),
   ], [requests.data, secretaryRequests.data?.requests, staffNames]);

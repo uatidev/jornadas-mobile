@@ -386,7 +386,7 @@ export default async ({ req, res, log, error }) => {
           ...(input.officeDate ? { fechaOficio: new Date(input.officeDate).toISOString() } : {}),
           ...(input.notes ? { observaciones: String(input.notes).trim() } : {}),
           rutaAtencion: input.route,
-          estatus: input.route === "secretaria" ? "recibida" : "pendiente_canalizacion",
+          estatus: input.route === "secretaria" ? "enviada" : "pendiente_canalizacion",
           capturadoPorUserId: userId,
           capturadoPorNombre: profile.nombre || account.name || account.email,
           capturadoEnNombreDeSecretaria: ["capturista_secretaria", "enlace"].includes(profile.rolSistema),
@@ -488,10 +488,10 @@ export default async ({ req, res, log, error }) => {
           `read(\"team:${unit.teamId}\")`, `update(\"team:${unit.teamId}\")`,
         ];
       } else if (input.status) {
-        const allowed = ["recibida", "en_atencion", "requiere_informacion", "atendida", "cancelada"];
+        const allowed = ["en_revision", "requiere_informacion", "concluida", "cancelada"];
         if (!allowed.includes(input.status)) return json(400, { message: "Estatus no permitido" });
         const directRequest = current.rutaAtencion === "secretaria";
-        if (input.status === "atendida" && directRequest && !isSuperAdmin && profile.rolSistema !== "secretaria")
+        if (input.status === "concluida" && directRequest && !isSuperAdmin && profile.rolSistema !== "secretaria")
           return json(403, { message: "El cierre definitivo corresponde a Secretaria" });
         if (profile.rolSistema === "gestor" && current.unidadResponsableId !== profile.unidadAdministrativaId)
           return json(403, { message: "La solicitud no pertenece a tu área" });
@@ -867,7 +867,7 @@ export default async ({ req, res, log, error }) => {
         `/databases/${DATABASE_ID}/collections/solicitudes/documents/${request.$id}`,
         {
           data: {
-            estatus: "requiere_informacion",
+            estatus: "reasignacion_solicitada",
             datosTramite: JSON.stringify({
               ...(() => { try { return JSON.parse(request.datosTramite || "{}"); } catch { return {}; } })(),
               __seguimiento: {
@@ -891,7 +891,7 @@ export default async ({ req, res, log, error }) => {
           data: {
             solicitudId: request.$id,
             estatusAnterior: request.estatus,
-            estatusNuevo: "requiere_informacion",
+            estatusNuevo: "reasignacion_solicitada",
             comentario: `No aplica en la unidad actual. Reasignacion solicitada: ${String(input.reason).trim()}`,
             realizadoPorUserId: userId,
             fecha: new Date().toISOString(),
@@ -1209,10 +1209,8 @@ export default async ({ req, res, log, error }) => {
       )
         return json(403, { message: "La solicitud pertenece a otra unidad" });
       const allowed = [
-        "recibida",
         "en_revision",
         "requiere_informacion",
-        "aprobada",
         "rechazada",
         "cancelada",
         "concluida",

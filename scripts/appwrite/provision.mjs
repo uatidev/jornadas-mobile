@@ -367,12 +367,10 @@ const schemas = {
     attr.enum(
       "estatus",
       [
-        "borrador",
         "enviada",
-        "recibida",
         "en_revision",
         "requiere_informacion",
-        "aprobada",
+        "reasignacion_solicitada",
         "rechazada",
         "cancelada",
         "concluida",
@@ -405,7 +403,7 @@ const schemas = {
     attr.datetime("fechaOficio", false),
     attr.string("observaciones", 1000, false),
     attr.enum("rutaAtencion", ["secretaria", "canalizacion", "canalizada"]),
-    attr.enum("estatus", ["recibida", "en_atencion", "requiere_informacion", "pendiente_canalizacion", "canalizada", "atendida", "cancelada"]),
+    attr.enum("estatus", ["enviada", "pendiente_canalizacion", "canalizada", "en_revision", "requiere_informacion", "concluida", "cancelada"]),
     attr.string("capturadoPorUserId", 64),
     attr.string("capturadoPorNombre", 160),
     attr.boolean("capturadoEnNombreDeSecretaria", false, false),

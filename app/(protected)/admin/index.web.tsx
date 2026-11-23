@@ -570,10 +570,8 @@ function DateTimeField({
 }
 
 const REQUEST_STATUSES = [
-  "recibida",
   "en_revision",
   "requiere_informacion",
-  "aprobada",
   "rechazada",
   "cancelada",
   "concluida",
@@ -582,14 +580,11 @@ const REQUEST_STATUSES = [
 const REQUEST_STATUS_LABELS: Record<string, string> = {
   enviada: "Nueva",
   en_espera_apertura: "En espera de apertura",
-  recibida: "Recibida",
   en_revision: "En seguimiento",
-  en_atencion: "En atención",
   requiere_informacion: "Requiere información",
+  reasignacion_solicitada: "Reasignación solicitada",
   pendiente_canalizacion: "Pendiente de canalización",
   canalizada: "Canalizada",
-  atendida: "Atendida",
-  aprobada: "Aprobada",
   rechazada: "No procedió",
   cancelada: "No continuó",
   concluida: "Concluida",
@@ -1490,8 +1485,8 @@ function SecretaryDashboard() {
       .slice(0, 8),
     [filteredEvents, eventRequestCounts],
   );
-  const changed = dashboardRows.filter((request) => !["enviada", "recibida"].includes(request.status)).length;
-  const concluded = dashboardRows.filter((request) => request.status === "concluida" || request.status === "atendida").length;
+  const changed = dashboardRows.filter((request) => request.status !== "enviada").length;
+  const concluded = dashboardRows.filter((request) => request.status === "concluida").length;
   const didNotContinue = dashboardRows.filter((request) => request.status === "rechazada" || request.status === "cancelada").length;
   const beneficiaries = dashboardRows.filter((request) => request.receivedBenefit === true).length;
   const priority = dashboardRows.filter((request) => request.priority).length;

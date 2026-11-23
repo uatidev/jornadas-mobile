@@ -12,13 +12,13 @@ import { Bar, BarChart, CartesianGrid, LabelList, Legend, Line, LineChart, Respo
 
 const COLORS = ["#981646", "#2563eb", "#059669", "#d97706"];
 const STATUS_GROUPS = [
-  { label: "Nuevas", statuses: ["enviada", "recibida"] },
-  { label: "En revisión o atención", statuses: ["en_revision", "en_atencion"] },
+  { label: "Nuevas", statuses: ["enviada"] },
+  { label: "En revisión", statuses: ["en_revision"] },
   { label: "Falta información", statuses: ["requiere_informacion"] },
+  { label: "Reasignación solicitada", statuses: ["reasignacion_solicitada"] },
   { label: "En canalización", statuses: ["pendiente_canalizacion", "canalizada"] },
   { label: "En espera de apertura", statuses: ["en_espera_apertura"] },
-  { label: "Aprobadas", statuses: ["aprobada"] },
-  { label: "Concluidas", statuses: ["concluida", "atendida"] },
+  { label: "Concluidas", statuses: ["concluida"] },
   { label: "No procedieron", statuses: ["rechazada"] },
   { label: "No continuaron", statuses: ["cancelada"] },
 ] as const;
@@ -88,13 +88,12 @@ export function SecretaryEventComparisonView() {
     const serviceCounts = new Map<string, number>();
     regularRequests.forEach((request) => serviceCounts.set(request.serviceId, (serviceCounts.get(request.serviceId) || 0) + 1));
     const topService = [...serviceCounts.entries()].sort((a, b) => b[1] - a[1])[0];
-    const resolved = count(["aprobada", "concluida", "atendida", "rechazada", "cancelada"]);
+    const resolved = count(["concluida", "rechazada", "cancelada"]);
     return {
       ...event,
       total: requests.length,
-      following: count(["en_revision", "en_atencion"]),
-      approved: count(["aprobada"]),
-      concluded: count(["concluida", "atendida"]),
+      following: count(["en_revision"]),
+      concluded: count(["concluida"]),
       rejected: count(["rechazada"]),
       cancelled: count(["cancelada"]),
       resolvedRate: requests.length ? Math.round((resolved / requests.length) * 100) : 0,
@@ -191,7 +190,7 @@ export function SecretaryEventComparisonView() {
         <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Unidades con mayor demanda</Text><Text className="mt-1 text-sm text-muted-foreground">Solicitudes recibidas por unidad administrativa en cada evento.</Text>{unitChart.length ? <GroupedChart data={unitChart} events={selectedEvents} /> : <Text className="py-16 text-center text-muted-foreground">No hay unidades registradas para comparar.</Text>}</View>
         <View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Comparación por sexo o género</Text><Text className="mt-1 text-sm text-muted-foreground">Respuestas del formulario global agrupadas por evento.</Text>{genderChart.length ? <GroupedChart data={genderChart} events={selectedEvents} /> : <Text className="py-16 text-center text-muted-foreground">Los eventos seleccionados no tienen respuestas capturadas en el campo de sexo o género.</Text>}</View>
       </View>
-      <View className="rounded-2xl border border-border bg-card p-5"><Text className="mb-4 text-xl font-bold">Resumen comparativo</Text><div className="overflow-auto rounded-xl border border-border"><table className="w-full min-w-[980px] border-collapse text-left text-sm"><thead className="bg-zinc-100"><tr><th className="px-4 py-3">Evento</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">En revisión o atención</th><th className="px-4 py-3">Aprobadas</th><th className="px-4 py-3">Concluidas</th><th className="px-4 py-3">No procedieron</th><th className="px-4 py-3">No continuaron</th><th className="px-4 py-3">Avance</th><th className="px-4 py-3">Trámite principal</th></tr></thead><tbody>{summary.map((event) => <tr key={event.id} className="border-t border-border"><td className="px-4 py-3 font-semibold" style={{ color: event.color }}>{event.name}</td><td className="px-4 py-3">{event.total}</td><td className="px-4 py-3">{event.following}</td><td className="px-4 py-3">{event.approved}</td><td className="px-4 py-3">{event.concluded}</td><td className="px-4 py-3">{event.rejected}</td><td className="px-4 py-3">{event.cancelled}</td><td className="px-4 py-3">{event.resolvedRate}%</td><td className="px-4 py-3">{event.topService}</td></tr>)}</tbody></table></div></View>
+      <View className="rounded-2xl border border-border bg-card p-5"><Text className="mb-4 text-xl font-bold">Resumen comparativo</Text><div className="overflow-auto rounded-xl border border-border"><table className="w-full min-w-[980px] border-collapse text-left text-sm"><thead className="bg-zinc-100"><tr><th className="px-4 py-3">Evento</th><th className="px-4 py-3">Total</th><th className="px-4 py-3">En revisión</th><th className="px-4 py-3">Concluidas</th><th className="px-4 py-3">No procedieron</th><th className="px-4 py-3">No continuaron</th><th className="px-4 py-3">Avance</th><th className="px-4 py-3">Trámite principal</th></tr></thead><tbody>{summary.map((event) => <tr key={event.id} className="border-t border-border"><td className="px-4 py-3 font-semibold" style={{ color: event.color }}>{event.name}</td><td className="px-4 py-3">{event.total}</td><td className="px-4 py-3">{event.following}</td><td className="px-4 py-3">{event.concluded}</td><td className="px-4 py-3">{event.rejected}</td><td className="px-4 py-3">{event.cancelled}</td><td className="px-4 py-3">{event.resolvedRate}%</td><td className="px-4 py-3">{event.topService}</td></tr>)}</tbody></table></div></View>
     </> : <View className="rounded-2xl border border-dashed border-border bg-card p-10"><Text className="text-center font-bold">Agrega al menos dos eventos</Text><Text className="mt-1 text-center text-sm text-muted-foreground">Las gráficas comparativas aparecerán cuando tengas dos o más eventos seleccionados.</Text></View>}
   </View>;
 }

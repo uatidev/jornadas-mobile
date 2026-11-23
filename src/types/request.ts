@@ -1,4 +1,4 @@
-export type RequestStatus = "borrador" | "enviada" | "en_espera_apertura" | "recibida" | "en_revision" | "requiere_informacion" | "aprobada" | "rechazada" | "cancelada" | "concluida";
+export type RequestStatus = "enviada" | "en_espera_apertura" | "en_revision" | "requiere_informacion" | "reasignacion_solicitada" | "rechazada" | "cancelada" | "concluida";
 
 export interface ServiceRequest {
   id: string;
@@ -37,7 +37,7 @@ export interface RequestHistoryEntry {
 }
 
 export type SecretaryRequestRoute = "secretaria" | "canalizacion" | "canalizada";
-export type SecretaryRequestStatus = "recibida" | "en_atencion" | "requiere_informacion" | "pendiente_canalizacion" | "canalizada" | "atendida" | "cancelada";
+export type SecretaryRequestStatus = "enviada" | "en_revision" | "requiere_informacion" | "pendiente_canalizacion" | "canalizada" | "concluida" | "cancelada";
 
 export interface SecretaryRequestDocument {
   fileId: string;

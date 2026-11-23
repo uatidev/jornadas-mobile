@@ -21,12 +21,12 @@ import { ActivityIndicator, KeyboardAvoidingView, Linking, Modal, Platform, Pres
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const STATUS_LABELS: Record<string, string> = {
-  recibida: "Recibida",
-  en_atencion: "En atención",
+  enviada: "Enviada",
+  en_revision: "En revisión",
   requiere_informacion: "Requiere información",
   pendiente_canalizacion: "Pendiente de canalización",
   canalizada: "Canalizada",
-  atendida: "Atendida",
+  concluida: "Concluida",
   cancelada: "Cancelada",
 };
 
@@ -69,10 +69,10 @@ function RequestCard({ item, canClose }: { item: SecretaryRequest; canClose: boo
       <GlassInput label="Criterio de canalización" type="textarea" value={comment} onChangeText={setComment} />
       <Button disabled={!unitId || update.isPending} onPress={() => update.mutate({ unitId, comment })}><Text>{update.isPending ? "Canalizando..." : "Confirmar canalización"}</Text></Button>
     </View> : null}
-    {canWork && item.status !== "atendida" && item.status !== "cancelada" && item.status !== "pendiente_canalizacion" ? <View className={`${compact ? "gap-2" : "flex-row flex-wrap gap-2"} border-t border-border pt-4`}>
-      <Button className={compact ? "w-full" : ""} size="sm" variant="outline" disabled={update.isPending} onPress={() => update.mutate({ status: "en_atencion" })}><Text>En atención</Text></Button>
+    {canWork && item.status !== "concluida" && item.status !== "cancelada" && item.status !== "pendiente_canalizacion" ? <View className={`${compact ? "gap-2" : "flex-row flex-wrap gap-2"} border-t border-border pt-4`}>
+      <Button className={compact ? "w-full" : ""} size="sm" variant="outline" disabled={update.isPending} onPress={() => update.mutate({ status: "en_revision" })}><Text>En revisión</Text></Button>
       <Button className={compact ? "w-full" : ""} size="sm" variant="outline" disabled={update.isPending} onPress={() => update.mutate({ status: "requiere_informacion" })}><Text>Solicitar información</Text></Button>
-      {(canClose || item.route === "canalizada") ? <Button className={compact ? "w-full" : ""} size="sm" disabled={update.isPending} onPress={() => update.mutate({ status: "atendida" })}><Text>Marcar atendida</Text></Button> : null}
+      {(canClose || item.route === "canalizada") ? <Button className={compact ? "w-full" : ""} size="sm" disabled={update.isPending} onPress={() => update.mutate({ status: "concluida" })}><Text>Marcar concluida</Text></Button> : null}
     </View> : null}
     {update.error ? <Text className="text-sm text-destructive">{update.error.message}</Text> : null}
   </View>;

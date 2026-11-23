@@ -16,15 +16,14 @@ import { ActivityIndicator, Pressable, ScrollView, View } from "react-native";
 const STATUS_LABELS: Record<string, string> = {
   enviada: "Nueva",
   en_espera_apertura: "En espera de apertura",
-  recibida: "Recibida",
   en_revision: "En seguimiento",
   requiere_informacion: "Requiere información",
-  aprobada: "Aprobada",
+  reasignacion_solicitada: "Reasignación solicitada",
   rechazada: "No procedió",
   cancelada: "No continuó",
   concluida: "Concluida",
 };
-const STATUSES = ["recibida", "en_revision", "requiere_informacion", "aprobada", "rechazada", "cancelada", "concluida"];
+const STATUSES = ["en_revision", "requiere_informacion", "rechazada", "cancelada", "concluida"];
 const REJECTION_REASONS = ["Falta de presupuesto", "Cupo agotado", "No cumple los requisitos", "Documentación inválida", "Fuera de cobertura", "Programa cerrado", "Solicitud duplicada", "Otro"];
 const CANCELLATION_REASONS = ["La persona desistió", "No entregó la información solicitada", "No fue posible localizarla", "Venció el plazo", "Recibió atención por otra vía", "Otro"];
 
@@ -181,7 +180,7 @@ export default function RequestDetailPage() {
       requestTypes: Object.fromEntries((selectedService?.formConfig?.fields || []).map((field) => [field.key, field.type])),
     };
   }, [globalForm.data, services.data, item?.serviceId]);
-  const selectedStatus = status || item?.status || "recibida";
+  const selectedStatus = status || (item?.status && STATUSES.includes(item.status) ? item.status : "en_revision");
   const outcomeReason = reason === "Otro" ? otherReason.trim() : reason.trim();
   const outcomeReasons = selectedStatus === "rechazada" ? REJECTION_REASONS : CANCELLATION_REASONS;
   const changeStatus = (nextStatus: string) => {

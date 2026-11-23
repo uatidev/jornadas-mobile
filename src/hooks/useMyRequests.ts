@@ -26,20 +26,16 @@ export type MyRequestItem = {
 };
 
 export const STATUS_LABELS: Record<string, string> = {
-  borrador: "Borrador",
   enviada: "Enviada",
   en_espera_apertura: "En espera de apertura",
-  recibida: "Recibida",
   en_revision: "En revisión",
   requiere_informacion: "Requiere información",
-  aprobada: "Aprobada",
+  reasignacion_solicitada: "Reasignación solicitada",
   rechazada: "Rechazada",
   cancelada: "Cancelada",
   concluida: "Concluida",
-  en_atencion: "En atención",
   pendiente_canalizacion: "Pendiente de canalización",
   canalizada: "Canalizada",
-  atendida: "Atendida",
 };
 
 export const statusLabel = (status: string) =>

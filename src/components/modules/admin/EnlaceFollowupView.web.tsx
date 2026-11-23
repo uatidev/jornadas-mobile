@@ -17,10 +17,10 @@ import { RequestsBarChart, StatusPieChart } from "./DashboardCharts.web";
 const SecretaryEventsMap = React.lazy(() => import("./SecretaryEventsMap.web").then((module) => ({ default: module.SecretaryEventsMap })));
 
 const STATUS_LABELS: Record<string, string> = {
-  borrador: "Borrador", enviada: "Enviada", en_espera_apertura: "En espera de apertura", recibida: "Recibida", en_revision: "En revisión",
-  requiere_informacion: "Requiere información", aprobada: "Aprobada", rechazada: "No procedió",
-  cancelada: "No continuó", concluida: "Concluida", en_atencion: "En atención",
-  pendiente_canalizacion: "Pendiente de canalización", canalizada: "Canalizada", atendida: "Atendida",
+  enviada: "Enviada", en_espera_apertura: "En espera de apertura", en_revision: "En revisión",
+  requiere_informacion: "Requiere información", reasignacion_solicitada: "Reasignación solicitada", rechazada: "No procedió",
+  cancelada: "No continuó", concluida: "Concluida",
+  pendiente_canalizacion: "Pendiente de canalización", canalizada: "Canalizada",
 };
 
 const normalizeFieldName = (value: string) => value
@@ -138,7 +138,7 @@ export function EnlaceFollowupView({ mode }: { mode: "seguimiento" | "evento" })
       return result;
     }, new Map<string, UnifiedRequest[]>());
     return <View className="gap-5"><View className="rounded-2xl border border-border bg-card p-5"><Text className="text-xl font-bold">Seguimiento de todas las solicitudes</Text><Text className="mb-4 mt-1 text-sm text-muted-foreground">Incluye trámites, servicios y solicitudes prioritarias de Secretaría.</Text><View className="grid grid-cols-4 gap-3 max-xl:grid-cols-2"><Input value={search} onChangeText={setSearch} placeholder="Buscar folio, trámite, unidad..." /><select value={eventId} onChange={(e) => setEventId(e.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2"><option value="">Todos los eventos</option>{(events.data || []).map((event) => <option key={event.id} value={event.id}>{event.name}</option>)}</select><select value={status} onChange={(e) => setStatus(e.currentTarget.value)} className="rounded-lg border border-zinc-300 bg-transparent px-3 py-2"><option value="">Todos los estatus</option>{Object.entries(STATUS_LABELS).map(([key, label]) => <option key={key} value={key}>{label}</option>)}</select><Button variant={groupByEvent ? "default" : "outline"} onPress={() => setGroupByEvent((value) => !value)}><Text>{groupByEvent ? "Vista por evento" : "Vista por solicitudes"}</Text></Button></View></View>
-      <View className="flex-row flex-wrap gap-4"><Metric label="Solicitudes" value={filteredRows.length} note="Resultado de los filtros" /><Metric label="Eventos" value={new Set(filteredRows.map((item) => item.eventId).filter(Boolean)).size} note="Con solicitudes registradas" /><Metric label="Pendientes" value={filteredRows.filter((item) => ["enviada", "recibida", "en_revision", "en_atencion", "requiere_informacion", "pendiente_canalizacion"].includes(item.status)).length} note="Requieren seguimiento" /><Metric label="Concluidas" value={filteredRows.filter((item) => ["concluida", "atendida"].includes(item.status)).length} note="Atención terminada" /></View>
+      <View className="flex-row flex-wrap gap-4"><Metric label="Solicitudes" value={filteredRows.length} note="Resultado de los filtros" /><Metric label="Eventos" value={new Set(filteredRows.map((item) => item.eventId).filter(Boolean)).size} note="Con solicitudes registradas" /><Metric label="Pendientes" value={filteredRows.filter((item) => ["enviada", "recibida", "en_revision", "en_atencion", "requiere_informacion", "pendiente_canalizacion"].includes(item.status)).length} note="Requieren seguimiento" /><Metric label="Concluidas" value={filteredRows.filter((item) => item.status === "concluida").length} note="Atención terminada" /></View>
       {groupByEvent ? <View className="gap-4">{[...groups.entries()].map(([id, rows]) => <View key={id} className="rounded-2xl border border-border bg-card p-5"><Text className="mb-1 text-xl font-bold">{id === "sin-evento" ? "Sin evento" : eventNames[id] || "Evento no disponible"}</Text><Text className="mb-4 text-sm text-muted-foreground">{rows.length} solicitudes</Text><RequestTable rows={rows} eventNames={eventNames} /></View>)}</View> : <View className="rounded-2xl border border-border bg-card p-5"><RequestTable rows={filteredRows} eventNames={eventNames} /></View>}
     </View>;
   }
