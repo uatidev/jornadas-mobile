@@ -158,6 +158,24 @@ export default async ({ req, res, log, error }) => {
     return data;
   };
 
+  // Trae TODOS los documentos de una colección en páginas de 500 con cursor.
+  // Antes había topes fijos (500/5000) y los listados/reportes se quedaban cortos sin avisar.
+  const listAllDocuments = async (collectionId, queries = []) => {
+    const pageSize = 500;
+    const documents = [];
+    let cursor = "";
+    while (true) {
+      const pageQueries = [...queries, { method: "limit", values: [pageSize] }];
+      if (cursor) pageQueries.push({ method: "cursorAfter", values: [cursor] });
+      const params = pageQueries.map((query) => `queries[]=${encodeURIComponent(JSON.stringify(query))}`).join("&");
+      const page = await call("GET", `/databases/${DATABASE_ID}/collections/${collectionId}/documents?total=false&${params}`);
+      const items = page.documents || [];
+      documents.push(...items);
+      if (items.length < pageSize) return documents;
+      cursor = items[items.length - 1].$id;
+    }
+  };
+
   const json = (status, data) => res.json(data, status);
   const nextFolioNumber = async (key) => {
     const documentId = `tramite-${key}`
@@ -342,7 +360,7 @@ export default async ({ req, res, log, error }) => {
     };
 
     if (input.action === "servicePopularity") {
-      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [5000] }))}`);
+      const result = { documents: await listAllDocuments("solicitudes") };
       const counts = (result.documents || []).reduce((summary, request) => {
         const serviceId = request.tramiteServicioId;
         if (serviceId) summary[serviceId] = (summary[serviceId] || 0) + 1;
@@ -446,7 +464,7 @@ export default async ({ req, res, log, error }) => {
     if (input.action === "listSecretaryRequests") {
       if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace", "gestor"].includes(profile.rolSistema))
         return json(403, { message: "No tienes acceso a solicitudes de Secretaria" });
-      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`);
+      const result = { documents: await listAllDocuments("solicitudes_secretaria") };
       let requests = result.documents || [];
       if (profile.rolSistema === "enlace")
         requests = requests.filter((item) => ["canalizacion", "canalizada"].includes(item.rutaAtencion));
@@ -459,7 +477,7 @@ export default async ({ req, res, log, error }) => {
     if (input.action === "listMySecretaryRequests") {
       if (!isSuperAdmin && !["secretaria", "capturista_secretaria", "enlace", "gestor"].includes(profile.rolSistema))
         return json(403, { message: "No tienes acceso a solicitudes de Secretaria" });
-      const result = await call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`);
+      const result = { documents: await listAllDocuments("solicitudes_secretaria") };
       const requests = (result.documents || [])
         .filter((item) => item.capturadoPorUserId === userId)
         .sort((a, b) => new Date(b.fechaRegistro).getTime() - new Date(a.fechaRegistro).getTime());
@@ -553,10 +571,8 @@ export default async ({ req, res, log, error }) => {
             message: "El evento de atención ya no está activo",
           });
       } else {
-        const result = await call(
-          "GET",
-          `/databases/${DATABASE_ID}/collections/eventos_atencion/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [100] }))}`,
-        );
+        // TODOS LOS EVENTOS: CON EL TOPE DE 100 EL EVENTO VIGENTE PODÍA QUEDAR FUERA
+        const result = { documents: await listAllDocuments("eventos_atencion") };
         event = (result.documents || []).find(
           (item) =>
             item.activo &&
@@ -702,6 +718,74 @@ export default async ({ req, res, log, error }) => {
       });
     }
 
+    // CREA O EDITA UN EVENTO DE ATENCIÓN. EL FOLIO (CLAVE-NN) LO ASIGNA SOLO EL SERVIDOR;
+    // EL ÍNDICE ÚNICO prefijo_folio_unique EVITA DUPLICADOS Y AQUÍ SE REINTENTA SI CHOCAN.
+    if (input.action === "saveAttentionEvent") {
+      if (!isSuperAdmin)
+        return json(403, { message: "Acceso exclusivo de superadministración" });
+      const event = input.event || {};
+      const text = (value) => String(value ?? "").trim();
+      const name = text(event.name);
+      const municipality = text(event.municipality);
+      const startsAt = new Date(event.startsAt);
+      const endsAt = new Date(event.endsAt);
+      const latitude = Number(event.latitude);
+      const longitude = Number(event.longitude);
+      if (!name || !municipality)
+        return json(400, { message: "El nombre y el municipio son obligatorios" });
+      if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime()))
+        return json(400, { message: "Las fechas de inicio y término no son válidas" });
+      if (startsAt > endsAt)
+        return json(400, { message: "La fecha de término debe ser posterior al inicio." });
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude))
+        return json(400, { message: "La ubicación del evento no es válida" });
+
+      const municipalityCode = municipality
+        .normalize("NFD").replace(/[̀-ͯ]/g, "")
+        .replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+      const eventsRoute = `/databases/${DATABASE_ID}/collections/eventos_atencion/documents`;
+      const current = event.id ? await call("GET", `${eventsRoute}/${event.id}`) : null;
+
+      const data = {
+        nombre: name, municipio: municipality, localidad: text(event.locality),
+        claveMunicipio: municipalityCode, sede: name, direccion: text(event.address),
+        fechaInicio: startsAt.toISOString(), fechaFin: endsAt.toISOString(),
+        latitud: latitude, longitud: longitude, activo: event.active !== false,
+        capacidad: null, notas: text(event.notes) || null,
+      };
+
+      // SE CONSERVA EL FOLIO AL EDITAR, SALVO QUE CAMBIE EL MUNICIPIO O EL FOLIO NO TENGA FORMATO CLAVE-NN
+      const keepFolio = current && current.claveMunicipio === municipalityCode &&
+        new RegExp(`^${municipalityCode}-\\d+$`).test(String(current.prefijoFolio || ""));
+      if (keepFolio) {
+        const updated = await call("PATCH", `${eventsRoute}/${current.$id}`, { data });
+        return json(200, { id: updated.$id, folioPrefix: updated.prefijoFolio });
+      }
+
+      const sameMunicipality = await listAllDocuments("eventos_atencion", [
+        { method: "equal", attribute: "municipio", values: [municipality] },
+      ]);
+      let nextNumber = sameMunicipality.reduce((maximum, item) => {
+        const match = String(item.prefijoFolio || "").match(/-(\d+)$/);
+        return Math.max(maximum, match ? Number(match[1]) : 0);
+      }, 0) + 1;
+
+      for (let attempt = 0; attempt < 5; attempt += 1, nextNumber += 1) {
+        const folioPrefix = `${municipalityCode}-${String(nextNumber).padStart(2, "0")}`;
+        try {
+          const saved = current
+            ? await call("PATCH", `${eventsRoute}/${current.$id}`, { data: { ...data, prefijoFolio: folioPrefix } })
+            : await call("POST", eventsRoute, { documentId: "unique()", data: { ...data, prefijoFolio: folioPrefix } });
+          return json(200, { id: saved.$id, folioPrefix: saved.prefijoFolio });
+        } catch (cause) {
+          // OTRO GUARDADO SIMULTÁNEO TOMÓ ESTE FOLIO: SE PRUEBA CON EL SIGUIENTE
+          if (!String(cause.message).toLowerCase().includes("already exists")) throw cause;
+          log(`Folio ${folioPrefix} ocupado, reintentando`);
+        }
+      }
+      return json(409, { message: "No fue posible asignar un folio al evento, intenta de nuevo" });
+    }
+
     if (input.action === "finishEvent") {
       if (!isSuperAdmin || profile.rol !== "super_admin")
         return json(403, { message: "Acceso exclusivo de superadministracion" });
@@ -797,8 +881,8 @@ export default async ({ req, res, log, error }) => {
       if (!isSuperAdmin || profile.rolSistema !== "super_admin")
         return json(403, { message: "Solo superadministración puede consultar correos" });
       const [regular, secretary] = await Promise.all([
-        call("GET", `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`),
-        call("GET", `/databases/${DATABASE_ID}/collections/solicitudes_secretaria/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`),
+        listAllDocuments("solicitudes").then((documents) => ({ documents })),
+        listAllDocuments("solicitudes_secretaria").then((documents) => ({ documents })),
       ]);
       const buildItem = (item, requestType) => {
         let applicantData = {};
@@ -830,10 +914,7 @@ export default async ({ req, res, log, error }) => {
         !["secretaria", "gestor", "enlace"].includes(profile.rolSistema)
       )
         return json(403, { message: "No tienes permisos para consultar reportes" });
-      const result = await call(
-        "GET",
-        `/databases/${DATABASE_ID}/collections/usuarios_perfil/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`,
-      );
+      const result = { documents: await listAllDocuments("usuarios_perfil") };
       return json(200, {
         staff: (result.documents || []).map((item) => ({
           id: item.userId || item.$id,
@@ -904,10 +985,7 @@ export default async ({ req, res, log, error }) => {
     if (input.action === "listReassignmentQueue") {
       if (!isSuperAdmin && profile.rolSistema !== "enlace")
         return json(403, { message: "Acceso exclusivo de enlaces" });
-      const result = await call(
-        "GET",
-        `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`,
-      );
+      const result = { documents: await listAllDocuments("solicitudes") };
       const pending = (result.documents || []).filter((item) => {
         try {
           return item.requiereReasignacion || JSON.parse(item.datosTramite || "{}").__seguimiento?.requiereReasignacion;
@@ -938,10 +1016,7 @@ export default async ({ req, res, log, error }) => {
     if (input.action === "canalizationReport") {
       if (!isSuperAdmin && profile.rolSistema !== "enlace")
         return json(403, { message: "Acceso exclusivo de enlaces de canalización" });
-      const result = await call(
-        "GET",
-        `/databases/${DATABASE_ID}/collections/solicitudes/documents?total=false&queries[]=${encodeURIComponent(JSON.stringify({ method: "limit", values: [500] }))}`,
-      );
+      const result = { documents: await listAllDocuments("solicitudes") };
       const items = (result.documents || []).flatMap((item) => {
         let tracking = {};
         try { tracking = JSON.parse(item.datosTramite || "{}").__seguimiento || {}; } catch {}

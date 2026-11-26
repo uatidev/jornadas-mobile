@@ -14,6 +14,7 @@
     "appwrite:grant-secretary": "node scripts/appwrite/grant-secretary-access.mjs",
     "appwrite:add-contact-fields": "node scripts/appwrite/add-contact-fields.mjs",
     "appwrite:update-catalog-images-access": "node scripts/appwrite/update-catalog-images-access.mjs",
+    "appwrite:check-event-folios": "node scripts/appwrite/check-event-folios.mjs",
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "DARK_MODE=media DARK_MODE=media expo start --android",

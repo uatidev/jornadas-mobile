@@ -235,10 +235,9 @@ const collections = [
   {
     id: "eventos_atencion",
     name: "Eventos de atención",
+    // CREAR/EDITAR SOLO POR identity-api (saveAttentionEvent / finishEvent), QUE ASIGNA EL FOLIO
     permissions: [
       read("users"),
-      create(superAdmin),
-      update(superAdmin),
       del(superAdmin),
     ],
   },
@@ -600,6 +599,9 @@ const indexes = {
       attributes: ["activo", "fechaInicio"],
       orders: ["ASC", "DESC"],
     },
+    // GARANTIZA QUE NO HAYA DOS EVENTOS CON EL MISMO FOLIO (CLAVE-NN).
+    // ANTES DE CREARLO: node scripts/appwrite/check-event-folios.mjs
+    { key: "prefijo_folio_unique", type: "unique", attributes: ["prefijoFolio"] },
   ],
 };
 
